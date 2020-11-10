@@ -1,0 +1,39 @@
+server :
+  port : 6008
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 103MB
+  codec:
+    max-in-memory-size: 100MB
+  mvc:
+    async:
+      request-timeout: 180000
+
+  rabbitmq:
+    addresses: localhost
+    port: 5672
+
+  cloud:
+    function:
+      definition: publishDiffStudyUpdate
+    stream:
+      bindings:
+        publishStudyUpdate-out-0:
+          destination: diff-study.update
+
+backing-services:
+  case:
+    base-uri: http://localhost:5000
+  network-conversion:
+    base-uri: http://localhost:5003
+  network-diff:
+    base-uri: http://localhost:6007
+
+network-store-server:
+  preloading-strategy: COLLECTION
+  base-uri: http://localhost:8080/
+
+
