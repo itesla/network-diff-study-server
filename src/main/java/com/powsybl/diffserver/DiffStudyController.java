@@ -14,6 +14,7 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
+import org.gridsuite.geodata.server.dto.SubstationGeoData;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,6 +26,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @author Christian Biasuzzi <christian.biasuzzi@techrain.eu>
@@ -145,6 +147,21 @@ public class DiffStudyController {
     public ResponseEntity<Flux<CaseInfos>> searchCase(@RequestParam("q") String q) {
         Flux<CaseInfos> cases = diffStudyService.searchCase(q);
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(cases);
+    }
+
+    @GetMapping(value = "/diff-studies/getsubscoords")
+    @ApiOperation(value = "Get substation coordinates", produces = "application/json")
+    @ApiResponses(value = {@ApiResponse(code = 200, message = "subs coordinates")})
+    public ResponseEntity<Mono<List<SubstationGeoData>>> getSubsCoordinates(@RequestParam("diffStudyName") String diffStudyName) {
+        DiffStudy diffStudy = diffStudyService.getDiffStudy(diffStudyName).block();
+        Mono<List<SubstationGeoData>> subsCoordsMono = diffStudyService.getSubsCoordinates(diffStudy.getNetwork1Uuid());
+        List<SubstationGeoData> subsCoords = subsCoordsMono.block();
+        List<SubstationGeoData> retSubs = subsCoords;
+        if (!diffStudy.getZone().isEmpty()) {
+            retSubs = subsCoords.stream()
+                    .filter(s -> diffStudy.getZone().contains(s.getId())).collect(Collectors.toList());
+        }
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(retSubs));
     }
 
 }

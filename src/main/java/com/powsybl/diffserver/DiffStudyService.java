@@ -15,6 +15,7 @@ import com.powsybl.diffserver.repository.DiffStudy;
 import com.powsybl.diffserver.repository.DiffStudyRepository;
 import com.powsybl.network.store.client.NetworkStoreService;
 import com.powsybl.network.store.model.TopLevelDocument;
+import org.gridsuite.geodata.server.dto.SubstationGeoData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,15 +62,9 @@ public class DiffStudyService {
     String networkConversionServerBaseUri;
     String networkStoreServerBaseUri;
     String networkDiffServerBaseUri;
+    String geoServerBaseUri;
 
     private final DiffStudyRepository diffStudyRepository;
-
-//    private EmitterProcessor<Message<String>> studyUpdatePublisher = EmitterProcessor.create();
-//
-//    @Bean
-//    public Supplier<Flux<Message<String>>> publishStudyUpdate() {
-//        return () -> studyUpdatePublisher;
-//    }
 
     @Autowired
     public DiffStudyService(
@@ -77,12 +72,14 @@ public class DiffStudyService {
             @Value("${backing-services.case.base-uri:http://case-server/}") String caseServerBaseUri,
             @Value("${backing-services.network-conversion.base-uri:http://network-conversion-server/}") String networkConversionServerBaseUri,
             @Value("${backing-services.network-diff.base-uri:http://network-diff-server/}") String networkDiffServerBaseUri,
+            @Value("${backing-services.geo-server.base-uri:http://geo-data-server/}") String geoServerBaseUri,
             DiffStudyRepository studyRepository,
             WebClient.Builder webClientBuilder) {
         this.caseServerBaseUri = caseServerBaseUri;
         this.networkConversionServerBaseUri = networkConversionServerBaseUri;
         this.networkStoreServerBaseUri = networkStoreServerBaseUri;
         this.networkDiffServerBaseUri = networkDiffServerBaseUri;
+        this.geoServerBaseUri = geoServerBaseUri;
 
         this.webClient =  webClientBuilder.build();
 
@@ -208,7 +205,6 @@ public class DiffStudyService {
     }
 
     // This function call directly the network store server without using the dedicated client because it's a blocking client.
-    // If we'll have new needs to call the network store server, then we'll migrate the network store client to be nonblocking
     Mono<List<VoltageLevelAttributes>> getNetworkVoltageLevels(UUID networkUuid) {
         String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/voltage-levels")
                 .buildAndExpand(networkUuid)
@@ -394,4 +390,21 @@ public class DiffStudyService {
         });
 
     }
+
+    public Mono<List<SubstationGeoData>> getSubsCoordinates(UUID networkUuid) {
+
+        String path = UriComponentsBuilder.fromPath("/v1/substations?networkUuid={networkUuid}")
+                .buildAndExpand(networkUuid)
+                .toUriString();
+
+        LOGGER.info("getgeodata substations for network: {}", networkUuid);
+
+        SubstationGeoData[] results = webClient.get()
+                .uri(geoServerBaseUri + path)
+                .retrieve()
+                .bodyToMono(SubstationGeoData[].class).block();
+
+        return Mono.just(Arrays.asList(results));
+    }
+
 }
