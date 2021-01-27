@@ -160,11 +160,15 @@ public class DiffStudyService {
     @Transactional
     public Mono<Void> deleteDiffStudy(String diffStudyName) {
         Mono<DiffStudy> studyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
-        return studyMono.flatMap(study -> diffStudyRepository.delete(study));
+        return studyMono.switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
+                .flatMap(study ->
+                        Mono.zip(deleteNetwork(study.getNetwork1Uuid()),
+                                deleteNetwork(study.getNetwork2Uuid()))
+                                .then(diffStudyRepository.delete(study))
+                );
     }
 
     Mono<UUID> importCase(Mono<FilePart> multipartFile) {
-
         return multipartFile.flatMap(file -> {
             MultipartBodyBuilder multipartBodyBuilder = new MultipartBodyBuilder();
             multipartBodyBuilder.part("file", file);
@@ -204,7 +208,7 @@ public class DiffStudyService {
         });
     }
 
-    // This function call directly the network store server without using the dedicated client because it's a blocking client.
+    // This functions call directly the network store server without using the dedicated client because it's a blocking client.
     Mono<List<VoltageLevelAttributes>> getNetworkVoltageLevels(UUID networkUuid) {
         String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/voltage-levels")
                 .buildAndExpand(networkUuid)
@@ -242,6 +246,16 @@ public class DiffStudyService {
                 });
     }
 
+    private Mono<Void> deleteNetwork(UUID networkUuid) {
+        String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}")
+                .buildAndExpand(networkUuid)
+                .toUriString();
+        return webClient.delete()
+                .uri(networkStoreServerBaseUri + path)
+                .retrieve()
+                .bodyToMono(Void.class);
+    }
+
     Mono<Boolean> caseExists(UUID caseUuid) {
         String path = UriComponentsBuilder.fromPath(DELIMITER + CASE_API_VERSION + "/cases/{caseUuid}/exists")
                 .buildAndExpand(caseUuid)
@@ -252,24 +266,6 @@ public class DiffStudyService {
                 .retrieve()
                 .bodyToMono(Boolean.class);
     }
-
-//    @Transactional
-//    public Mono<DiffStudy> renameDiffStudy(String diffStudyName, String userId, String headerUserId, String newStudyName) {
-//        //we need to ensure that it's the initial creator that deletes it
-//        if (!userId.equals(headerUserId)) {
-//            return Mono.error(new DiffStudyException(NOT_ALLOWED));
-//        }
-//        Mono<DiffStudy> studyMono = diffStudyRepository.findByStudyName(userId, diffStudyName);
-//        return studyMono.switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS))).flatMap(study -> {
-//            study.setDiffStudyName(newStudyName);
-//
-//            Mono<Void> deleteStudy = deleteStudy(diffStudyName);
-//            Mono<DiffStudy> insertStudy = insertStudy(newStudyName, userId, study.isPrivate(), study.getNetworkUuid(), study.getNetworkId(),
-//                    study.getDescription(), study.getCaseFormat(), study.getCaseUuid(), study.isCasePrivate());
-//
-//            return deleteStudy.then(insertStudy);
-//        });
-//    }
 
     Mono<UUID> getDiffStudyUuid(String diffStudyName) {
         Mono<DiffStudy> studyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
@@ -406,5 +402,4 @@ public class DiffStudyService {
 
         return Mono.just(Arrays.asList(results));
     }
-
 }
