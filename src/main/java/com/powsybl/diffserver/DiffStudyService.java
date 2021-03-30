@@ -71,33 +71,64 @@ public class DiffStudyService {
     private static final Logger LOGGER = LoggerFactory.getLogger(DiffStudyService.class);
 
     class LineDiffData {
-        final double pDelta;
-        final double qDelta;
-        final double iDelta;
+        final String lineId;
+        final String pDelta1;
+        final String qDelta1;
+        final String iDelta1;
+        final String pDelta2;
+        final String qDelta2;
+        final String iDelta2;
 
-        public LineDiffData(double pDelta, double qDelta, double iDelta) {
-            this.pDelta = pDelta;
-            this.qDelta = qDelta;
-            this.iDelta = iDelta;
+        public LineDiffData(String lineId, String pDelta1, String qDelta1, String iDelta1, String pDelta2, String qDelta2, String iDelta2) {
+            this.lineId = lineId;
+            this.pDelta1 = pDelta1;
+            this.qDelta1 = qDelta1;
+            this.iDelta1 = iDelta1;
+            this.pDelta2 = pDelta2;
+            this.qDelta2 = qDelta2;
+            this.iDelta2 = iDelta2;
         }
 
-        public double getpDelta() {
-            return pDelta;
+        public String getLineId() {
+            return lineId;
         }
 
-        public double getqDelta() {
-            return qDelta;
+        public String getpDelta1() {
+            return pDelta1;
         }
 
-        public double getiDelta() {
-            return iDelta;
+        public String getqDelta1() {
+            return qDelta1;
+        }
+
+        public String getiDelta1() {
+            return iDelta1;
+        }
+
+        public String getpDelta2() {
+            return pDelta2;
+        }
+
+        public String getqDelta2() {
+            return qDelta2;
+        }
+
+        public String getiDelta2() {
+            return iDelta2;
+        }
+
+        @Override
+        public String toString() {
+            return "LineDiffData{" +
+                    "lineId='" + lineId + '\'' +
+                    '}';
         }
     }
 
     class DiffData {
         final List<String> switchesDiff;
         final List<String> branchesDiff;
-        final List<String> branchesIdsDiff;
+        final List<LineDiffData> linesDiffData;
 
         DiffData(String jsonDiff) throws IOException {
             ObjectMapper objectMapper = new ObjectMapper();
@@ -110,8 +141,17 @@ public class DiffStudyService {
                     .map(t -> ((Map) t).get("branch.terminalStatus-delta"))
                     .flatMap(t -> ((List<String>) t).stream())
                     .collect(Collectors.toList());
-            branchesIdsDiff = (List<String>) ((List) jsonMap.get("diff.Branches")).stream()
-                    .map(t -> ((Map) t).get("branch.branchId1"))
+            linesDiffData = (List<LineDiffData>) ((List) jsonMap.get("diff.Branches")).stream()
+                    .map(t -> {
+                        Map<String, Object> branchMap = (Map) t;
+                        return new LineDiffData(branchMap.get("branch.branchId1").toString(),
+                                branchMap.get("branch.terminal1.p-delta").toString(),
+                                branchMap.get("branch.terminal1.q-delta").toString(),
+                                branchMap.get("branch.terminal1.i-delta").toString(),
+                                branchMap.get("branch.terminal2.p-delta").toString(),
+                                branchMap.get("branch.terminal2.q-delta").toString(),
+                                branchMap.get("branch.terminal2.i-delta").toString());
+                    })
                     .collect(Collectors.toList());
         }
 
@@ -123,8 +163,8 @@ public class DiffStudyService {
             return branchesDiff;
         }
 
-        public List<String> getBranchesIds2() {
-            return branchesIdsDiff;
+        public List<LineDiffData> getLinesDiffData() {
+            return linesDiffData;
         }
 
     }
@@ -564,7 +604,7 @@ public class DiffStudyService {
         //perform diff among the substations in the zone
         //gather all the branches that differs
         List<String> subsIds = diffStudy.getZone();
-        Set<String> zoneBranches = new HashSet<>();
+        Map<String, LineDiffData> zoneBranchesMap = new HashMap<>();
 
         Network network1 = getNetwork(diffStudy.getNetwork1Uuid());
         Network network2 = getNetwork(diffStudy.getNetwork2Uuid());
@@ -573,15 +613,19 @@ public class DiffStudyService {
                 String jsonDiff = diffSubstation(network1, network2, subId, threshold);
                 DiffData diffData = new DiffData(jsonDiff);
                 List<String> switchesDiff = diffData.getSwitchesIds();
-                List<String> branchesDiff = diffData.getBranchesIds2();
+                List<LineDiffData> branchesDiff = diffData.getLinesDiffData();
                 LOGGER.info("switchesDiff: {}, branchesDiff: {}", switchesDiff, branchesDiff);
-                zoneBranches.addAll(branchesDiff);
+                for (LineDiffData lineDiffData : branchesDiff) {
+                    if (!zoneBranchesMap.containsKey(lineDiffData.getLineId())) {
+                        zoneBranchesMap.put(lineDiffData.getLineId(), lineDiffData);
+                    }
+                }
             }
         } catch (PowsyblException | IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         }
 
-        LOGGER.info("ALL branches that differ: {}", zoneBranches);
+        LOGGER.info("ALL branches that differ: {}", zoneBranchesMap);
 
         //get network1 data
         Mono<List<LineGeoData>> linesCoordsMono = getLinesCoordinates(diffStudy.getNetwork1Uuid());
@@ -598,15 +642,24 @@ public class DiffStudyService {
                 List lineCoord2 = lineCoordinates.stream().map(lc -> Point.fromLngLat(lc.getLon(), lc.getLat())).collect(Collectors.toList());
                 Feature featureLine = Feature.fromGeometry(LineString.fromLngLats(lineCoord2));
                 featureLine.addStringProperty("id", lineData.getId());
-                featureLine.addStringProperty("popupContent", "line " + lineData.getId());
                 JsonObject style = new JsonObject();
                 style.addProperty("weight", 4);
-                if (zoneBranches.contains(lineData.getId())) {
+                String popupInfo = "<p><b>line " + lineData.getId() + "</b></p>";
+                if (zoneBranchesMap.containsKey(lineData.getId())) {
+                    LineDiffData lineDiffData = zoneBranchesMap.get(lineData.getId());
+                    popupInfo = "<p><b>line <u>" + lineData.getId() + "</u></b></p>"
+                        + "<p><b>t1 delta p:</b> " + lineDiffData.getpDelta1() + "</p>"
+                        + "<p><b>t1 delta q:</b> " + lineDiffData.getqDelta1() + "</p>"
+                        + "<p><b>t1 delta i:</b> " + lineDiffData.getiDelta1() + "</p>"
+                        + "<p><b>t2 delta p:</b> " + lineDiffData.getpDelta2() + "</p>"
+                        + "<p><b>t2 delta q:</b> " + lineDiffData.getqDelta2() + "</p>"
+                        + "<p><b>t2 delta i:</b> " + lineDiffData.getiDelta2() + "</p>";
                     style.addProperty("color", "#FF0000");
                 } else {
                     style.addProperty("color", "#0000FF");
                 }
 
+                featureLine.addStringProperty("popupContent", popupInfo);
                 style.addProperty("opacity", 1);
                 style.addProperty("fillColor", "#FF0000");
                 style.addProperty("fillOpacity", 1);
