@@ -70,6 +70,30 @@ public class DiffStudyService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiffStudyService.class);
 
+    class LineDiffData {
+        final double pDelta;
+        final double qDelta;
+        final double iDelta;
+
+        public LineDiffData(double pDelta, double qDelta, double iDelta) {
+            this.pDelta = pDelta;
+            this.qDelta = qDelta;
+            this.iDelta = iDelta;
+        }
+
+        public double getpDelta() {
+            return pDelta;
+        }
+
+        public double getqDelta() {
+            return qDelta;
+        }
+
+        public double getiDelta() {
+            return iDelta;
+        }
+    }
+
     class DiffData {
         final List<String> switchesDiff;
         final List<String> branchesDiff;
@@ -490,6 +514,10 @@ public class DiffStudyService {
     }
 
     private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches) {
+        return diffVoltageLevels(network1, network2, voltageLevels, branches, DiffConfig.EPSILON_DEFAULT);
+    }
+
+    private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches, double threshold) {
         DiffEquipment diffEquipment = new DiffEquipment();
         diffEquipment.setVoltageLevels(voltageLevels);
         List<DiffEquipmentType> equipmentTypes = new ArrayList<DiffEquipmentType>();
@@ -499,7 +527,7 @@ public class DiffStudyService {
             diffEquipment.setBranches(branches);
         }
         diffEquipment.setEquipmentTypes(equipmentTypes);
-        DiffConfig config = new DiffConfig(DiffConfig.EPSILON_DEFAULT, DiffConfig.FILTER_DIFF_DEFAULT);
+        DiffConfig config = new DiffConfig(threshold, DiffConfig.FILTER_DIFF_DEFAULT);
         NetworkDiff ndiff = new NetworkDiff(config);
         NetworkDiffResults diffVl = ndiff.diff(network1, network2, diffEquipment);
         String jsonDiff = NetworkDiff.writeJson(diffVl);
@@ -510,6 +538,10 @@ public class DiffStudyService {
     }
 
     private String diffSubstation(Network network1, Network network2, String substationId) {
+        return diffSubstation(network1, network2, substationId, DiffConfig.EPSILON_DEFAULT);
+    }
+
+    private String diffSubstation(Network network1, Network network2, String substationId, double threshold) {
         Substation substation1 = network1.getSubstation(substationId);
         List<String> voltageLevels = substation1.getVoltageLevelStream().map(VoltageLevel::getId)
                 .collect(Collectors.toList());
@@ -518,11 +550,15 @@ public class DiffStudyService {
         List<String> twts = substation1.getTwoWindingsTransformerStream().map(TwoWindingsTransformer::getId)
                 .collect(Collectors.toList());
         branches.addAll(twts);
-        String jsonDiff = diffVoltageLevels(network1, network2, voltageLevels, branches);
+        String jsonDiff = diffVoltageLevels(network1, network2, voltageLevels, branches, threshold);
         return jsonDiff;
     }
 
     public String getLinesJson(String diffStudyName) {
+        return getLinesJson(diffStudyName, DiffConfig.EPSILON_DEFAULT);
+    }
+
+    public String getLinesJson(String diffStudyName, double threshold) {
         DiffStudy diffStudy = getDiffStudy(diffStudyName).block();
 
         //perform diff among the substations in the zone
@@ -534,7 +570,7 @@ public class DiffStudyService {
         Network network2 = getNetwork(diffStudy.getNetwork2Uuid());
         try {
             for (String subId : subsIds) {
-                String jsonDiff = diffSubstation(network1, network2, subId);
+                String jsonDiff = diffSubstation(network1, network2, subId, threshold);
                 DiffData diffData = new DiffData(jsonDiff);
                 List<String> switchesDiff = diffData.getSwitchesIds();
                 List<String> branchesDiff = diffData.getBranchesIds2();
@@ -555,14 +591,7 @@ public class DiffStudyService {
             List<String> zoneLines = getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
             LOGGER.info("zoneLines: {}", zoneLines);
             retLines = linesCoords.stream()
-                    .filter(s -> {
-                        boolean coordsFound = zoneLines.contains(s.getId());
-                        if (!coordsFound) {
-                            LOGGER.warn("line {}: coordinates not found", s.getId());
-                        }
-                        return coordsFound;
-                    }).collect(Collectors.toList());
-
+                    .filter(s -> zoneLines.contains(s.getId())).collect(Collectors.toList());
             List<Feature> features = new ArrayList<>();
             for (LineGeoData lineData : retLines) {
                 List<Coordinate> lineCoordinates = lineData.getCoordinates();

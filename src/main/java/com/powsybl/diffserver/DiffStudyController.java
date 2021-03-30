@@ -14,7 +14,6 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
-import org.gridsuite.geodata.server.dto.LineGeoData;
 import org.gridsuite.geodata.server.dto.SubstationGeoData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -168,29 +167,11 @@ public class DiffStudyController {
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(retSubs));
     }
 
-    @GetMapping(value = "/diff-studies/getlinescoords")
-    @ApiOperation(value = "Get lines coordinates", produces = "application/json")
-    @ApiResponses(value = {@ApiResponse(code = 200, message = "lines coordinates")})
-    public ResponseEntity<Mono<List<LineGeoData>>> getLinesCoordinates(@RequestParam("diffStudyName") String diffStudyName) {
-        DiffStudy diffStudy = diffStudyService.getDiffStudy(diffStudyName).block();
-        //get network1 data
-        Mono<List<LineGeoData>> linesCoordsMono = diffStudyService.getLinesCoordinates(diffStudy.getNetwork1Uuid());
-        List<LineGeoData> linesCoords = linesCoordsMono.block();
-        List<LineGeoData> retLines = linesCoords;
-        if (!diffStudy.getZone().isEmpty()) {
-            List<String> zoneLines = diffStudyService.getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
-            LOGGER.info("zoneLines: {}", zoneLines);
-            retLines = linesCoords.stream()
-                    .filter(s -> zoneLines.contains(s.getId())).collect(Collectors.toList());
-        }
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(retLines));
-    }
-
     @GetMapping(value = "/diff-studies/getlinescoordsgeojson")
-    @ApiOperation(value = "Get lines geojson", produces = "application/json")
-    @ApiResponses(value = {@ApiResponse(code = 200, message = "lines geojson")})
-    public ResponseEntity<Mono<String>> getLinesCoordinatesGeoJson(@RequestParam("diffStudyName") String diffStudyName) {
-        String linesGeoJson = diffStudyService.getLinesJson(diffStudyName);
+    @ApiOperation(value = "Get lines diff geojson", produces = "application/json")
+    @ApiResponses(value = {@ApiResponse(code = 200, message = "lines diff geojson")})
+    public ResponseEntity<Mono<String>> getLinesCoordinatesGeoJson(@RequestParam("diffStudyName") String diffStudyName, @RequestParam("threshold") Double threshold) {
+        String linesGeoJson = diffStudyService.getLinesJson(diffStudyName, threshold);
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(linesGeoJson));
     }
 
