@@ -99,6 +99,12 @@
         </dependency>
 
         <dependency>
+            <groupId>com.mapbox.mapboxsdk</groupId>
+            <artifactId>mapbox-sdk-geojson</artifactId>
+            <version>5.8.0</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.powsybl</groupId>
             <artifactId>powsybl-iidm-api</artifactId>
             <version>${powsybl-core.version}</version>

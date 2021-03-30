@@ -6,6 +6,13 @@
  */
 package com.powsybl.diffserver;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonObject;
+import com.mapbox.geojson.Feature;
+import com.mapbox.geojson.FeatureCollection;
+import com.mapbox.geojson.LineString;
+import com.mapbox.geojson.Point;
 import com.powsybl.commons.PowsyblException;
 import com.powsybl.diffserver.dto.CaseInfos;
 import com.powsybl.diffserver.dto.DiffStudyInfos;
@@ -13,8 +20,12 @@ import com.powsybl.diffserver.dto.NetworkInfos;
 import com.powsybl.diffserver.dto.VoltageLevelAttributes;
 import com.powsybl.diffserver.repository.DiffStudy;
 import com.powsybl.diffserver.repository.DiffStudyRepository;
+import com.powsybl.iidm.diff.*;
+import com.powsybl.iidm.network.*;
 import com.powsybl.network.store.client.NetworkStoreService;
 import com.powsybl.network.store.model.TopLevelDocument;
+import org.gridsuite.geodata.extensions.Coordinate;
+import org.gridsuite.geodata.server.dto.LineGeoData;
 import org.gridsuite.geodata.server.dto.SubstationGeoData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +34,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.multipart.FilePart;
@@ -30,12 +42,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.ZonedDateTime;
@@ -56,6 +70,41 @@ public class DiffStudyService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiffStudyService.class);
 
+    class DiffData {
+        final List<String> switchesDiff;
+        final List<String> branchesDiff;
+        final List<String> branchesIdsDiff;
+
+        DiffData(String jsonDiff) throws IOException {
+            ObjectMapper objectMapper = new ObjectMapper();
+            Map<String, Object> jsonMap = objectMapper.readValue(jsonDiff, new TypeReference<Map<String, Object>>() { });
+            switchesDiff = (List<String>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
+                    .map(t -> ((Map) t).get("vl.switchesStatus-delta"))
+                    .flatMap(t -> ((List<String>) t).stream())
+                    .collect(Collectors.toList());
+            branchesDiff = (List<String>) ((List) jsonMap.get("diff.Branches")).stream()
+                    .map(t -> ((Map) t).get("branch.terminalStatus-delta"))
+                    .flatMap(t -> ((List<String>) t).stream())
+                    .collect(Collectors.toList());
+            branchesIdsDiff = (List<String>) ((List) jsonMap.get("diff.Branches")).stream()
+                    .map(t -> ((Map) t).get("branch.branchId1"))
+                    .collect(Collectors.toList());
+        }
+
+        public List<String> getSwitchesIds() {
+            return switchesDiff;
+        }
+
+        public List<String> getBranchesIds() {
+            return branchesDiff;
+        }
+
+        public List<String> getBranchesIds2() {
+            return branchesIdsDiff;
+        }
+
+    }
+
     private WebClient webClient;
 
     String caseServerBaseUri;
@@ -65,6 +114,9 @@ public class DiffStudyService {
     String geoServerBaseUri;
 
     private final DiffStudyRepository diffStudyRepository;
+
+    @Autowired
+    private NetworkStoreService networkStoreService;
 
     @Autowired
     public DiffStudyService(
@@ -402,4 +454,140 @@ public class DiffStudyService {
 
         return Mono.just(Arrays.asList(results));
     }
+
+    private Network getNetwork(UUID networkUuid) {
+        try {
+            return networkStoreService.getNetwork(networkUuid);
+        } catch (PowsyblException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Network '" + networkUuid + "' not found");
+        }
+    }
+
+    public List<String> getZoneLines(UUID networkUuid, List<String> zone) {
+        try {
+            Network network = getNetwork(networkUuid);
+            List<String> zoneLines = zone.stream().map(s -> network.getSubstation(s).getVoltageLevelStream().flatMap(vl -> vl.getConnectableStream(Line.class))
+                    .map(Line::getId).collect(Collectors.toList())).flatMap(List::stream).distinct().collect(Collectors.toList());
+            return zoneLines;
+        } catch (PowsyblException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Network '" + networkUuid + "' not found");
+        }
+    }
+
+    public Mono<List<LineGeoData>> getLinesCoordinates(UUID networkUuid) {
+        String path = UriComponentsBuilder.fromPath("/v1/lines?networkUuid={networkUuid}")
+                .buildAndExpand(networkUuid)
+                .toUriString();
+
+        LOGGER.info("getgeodata lines for network: {}", networkUuid);
+
+        LineGeoData[] results = webClient.get()
+                .uri(geoServerBaseUri + path)
+                .retrieve()
+                .bodyToMono(LineGeoData[].class).block();
+
+        return Mono.just(Arrays.asList(results));
+    }
+
+    private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches) {
+        DiffEquipment diffEquipment = new DiffEquipment();
+        diffEquipment.setVoltageLevels(voltageLevels);
+        List<DiffEquipmentType> equipmentTypes = new ArrayList<DiffEquipmentType>();
+        equipmentTypes.add(DiffEquipmentType.VOLTAGE_LEVELS);
+        if (!branches.isEmpty()) {
+            equipmentTypes.add(DiffEquipmentType.BRANCHES);
+            diffEquipment.setBranches(branches);
+        }
+        diffEquipment.setEquipmentTypes(equipmentTypes);
+        DiffConfig config = new DiffConfig(DiffConfig.EPSILON_DEFAULT, DiffConfig.FILTER_DIFF_DEFAULT);
+        NetworkDiff ndiff = new NetworkDiff(config);
+        NetworkDiffResults diffVl = ndiff.diff(network1, network2, diffEquipment);
+        String jsonDiff = NetworkDiff.writeJson(diffVl);
+        //NaN is not part of the JSON standard and frontend would fail when parsing it
+        //it should be handled at the source, though
+        jsonDiff = jsonDiff.replace(": NaN,", ": \"Nan\",");
+        return jsonDiff;
+    }
+
+    private String diffSubstation(Network network1, Network network2, String substationId) {
+        Substation substation1 = network1.getSubstation(substationId);
+        List<String> voltageLevels = substation1.getVoltageLevelStream().map(VoltageLevel::getId)
+                .collect(Collectors.toList());
+        List<String> branches = substation1.getVoltageLevelStream().flatMap(vl -> vl.getConnectableStream(Line.class))
+                .map(Line::getId).collect(Collectors.toList());
+        List<String> twts = substation1.getTwoWindingsTransformerStream().map(TwoWindingsTransformer::getId)
+                .collect(Collectors.toList());
+        branches.addAll(twts);
+        String jsonDiff = diffVoltageLevels(network1, network2, voltageLevels, branches);
+        return jsonDiff;
+    }
+
+    public String getLinesJson(String diffStudyName) {
+        DiffStudy diffStudy = getDiffStudy(diffStudyName).block();
+
+        //perform diff among the substations in the zone
+        //gather all the branches that differs
+        List<String> subsIds = diffStudy.getZone();
+        Set<String> zoneBranches = new HashSet<>();
+
+        Network network1 = getNetwork(diffStudy.getNetwork1Uuid());
+        Network network2 = getNetwork(diffStudy.getNetwork2Uuid());
+        try {
+            for (String subId : subsIds) {
+                String jsonDiff = diffSubstation(network1, network2, subId);
+                DiffData diffData = new DiffData(jsonDiff);
+                List<String> switchesDiff = diffData.getSwitchesIds();
+                List<String> branchesDiff = diffData.getBranchesIds2();
+                LOGGER.info("switchesDiff: {}, branchesDiff: {}", switchesDiff, branchesDiff);
+                zoneBranches.addAll(branchesDiff);
+            }
+        } catch (PowsyblException | IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        }
+
+        LOGGER.info("ALL branches that differ: {}", zoneBranches);
+
+        //get network1 data
+        Mono<List<LineGeoData>> linesCoordsMono = getLinesCoordinates(diffStudy.getNetwork1Uuid());
+        List<LineGeoData> linesCoords = linesCoordsMono.block();
+        List<LineGeoData> retLines = linesCoords;
+        if (!diffStudy.getZone().isEmpty()) {
+            List<String> zoneLines = getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
+            LOGGER.info("zoneLines: {}", zoneLines);
+            retLines = linesCoords.stream()
+                    .filter(s -> {
+                        boolean coordsFound = zoneLines.contains(s.getId());
+                        if (!coordsFound) {
+                            LOGGER.warn("line {}: coordinates not found", s.getId());
+                        }
+                        return coordsFound;
+                    }).collect(Collectors.toList());
+
+            List<Feature> features = new ArrayList<>();
+            for (LineGeoData lineData : retLines) {
+                List<Coordinate> lineCoordinates = lineData.getCoordinates();
+                List lineCoord2 = lineCoordinates.stream().map(lc -> Point.fromLngLat(lc.getLon(), lc.getLat())).collect(Collectors.toList());
+                Feature featureLine = Feature.fromGeometry(LineString.fromLngLats(lineCoord2));
+                featureLine.addStringProperty("id", lineData.getId());
+                featureLine.addStringProperty("popupContent", "line " + lineData.getId());
+                JsonObject style = new JsonObject();
+                style.addProperty("weight", 4);
+                if (zoneBranches.contains(lineData.getId())) {
+                    style.addProperty("color", "#FF0000");
+                } else {
+                    style.addProperty("color", "#0000FF");
+                }
+
+                style.addProperty("opacity", 1);
+                style.addProperty("fillColor", "#FF0000");
+                style.addProperty("fillOpacity", 1);
+                featureLine.addProperty("style", style);
+                features.add(featureLine);
+            }
+            FeatureCollection featureCollection = FeatureCollection.fromFeatures(features);
+            return featureCollection.toJson();
+        }
+        return FeatureCollection.fromFeatures(Collections.emptyList()).toJson();
+    }
+
 }
