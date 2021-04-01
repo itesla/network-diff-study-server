@@ -175,4 +175,11 @@ public class DiffStudyController {
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(linesGeoJson));
     }
 
+    @GetMapping(value = "/diff-studies/getsubscoordsgeojson")
+    @ApiOperation(value = "Get substations geojson", produces = "application/json")
+    @ApiResponses(value = {@ApiResponse(code = 200, message = "substations geojson")})
+    public ResponseEntity<Mono<String>> getSubstationsCoordinatesGeoJson(@RequestParam("diffStudyName") String diffStudyName, @RequestParam("threshold") Double threshold) {
+        String subsGeoJson = diffStudyService.getSubsJson(diffStudyName, threshold);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(subsGeoJson));
+    }
 }

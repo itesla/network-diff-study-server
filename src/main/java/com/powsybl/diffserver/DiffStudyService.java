@@ -538,7 +538,7 @@ public class DiffStudyService {
         }
     }
 
-    public Mono<List<LineGeoData>> getLinesCoordinates(UUID networkUuid) {
+    private LineGeoData[] getLinesCoordinates(UUID networkUuid) {
         String path = UriComponentsBuilder.fromPath("/v1/lines?networkUuid={networkUuid}")
                 .buildAndExpand(networkUuid)
                 .toUriString();
@@ -549,8 +549,16 @@ public class DiffStudyService {
                 .uri(geoServerBaseUri + path)
                 .retrieve()
                 .bodyToMono(LineGeoData[].class).block();
+        return results;
+    }
 
-        return Mono.just(Arrays.asList(results));
+    public List<LineGeoData> getLinesCoordinatesList(UUID networkUuid) {
+        return Arrays.asList(getLinesCoordinates(networkUuid));
+    }
+
+    public Map<String, LineGeoData> getLinesCoordinatesAsMap(UUID networkUuid) {
+        return Arrays.stream(getLinesCoordinates(networkUuid))
+                .collect(Collectors.toMap(LineGeoData::getId, geoData -> geoData));
     }
 
     private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches) {
@@ -628,16 +636,15 @@ public class DiffStudyService {
         LOGGER.info("ALL branches that differ: {}", zoneBranchesMap);
 
         //get network1 data
-        Mono<List<LineGeoData>> linesCoordsMono = getLinesCoordinates(diffStudy.getNetwork1Uuid());
-        List<LineGeoData> linesCoords = linesCoordsMono.block();
-        List<LineGeoData> retLines = linesCoords;
+        Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy.getNetwork1Uuid());
+        List<LineGeoData> zoneLinesCoordsData = Collections.emptyList();
         if (!diffStudy.getZone().isEmpty()) {
             List<String> zoneLines = getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
             LOGGER.info("zoneLines: {}", zoneLines);
-            retLines = linesCoords.stream()
-                    .filter(s -> zoneLines.contains(s.getId())).collect(Collectors.toList());
+            zoneLinesCoordsData = zoneLines.stream().filter(networkLinesCoordsData::containsKey)
+                    .map(networkLinesCoordsData::get).collect(Collectors.toList());
             List<Feature> features = new ArrayList<>();
-            for (LineGeoData lineData : retLines) {
+            for (LineGeoData lineData : zoneLinesCoordsData) {
                 List<Coordinate> lineCoordinates = lineData.getCoordinates();
                 List lineCoord2 = lineCoordinates.stream().map(lc -> Point.fromLngLat(lc.getLon(), lc.getLat())).collect(Collectors.toList());
                 Feature featureLine = Feature.fromGeometry(LineString.fromLngLats(lineCoord2));
@@ -655,8 +662,10 @@ public class DiffStudyService {
                         + "<p><b>t2 delta q:</b> " + lineDiffData.getqDelta2() + "</p>"
                         + "<p><b>t2 delta i:</b> " + lineDiffData.getiDelta2() + "</p>";
                     style.addProperty("color", "#FF0000");
+                    featureLine.addStringProperty("isDifferent", "true");
                 } else {
                     style.addProperty("color", "#0000FF");
+                    featureLine.addStringProperty("isDifferent", "false");
                 }
 
                 featureLine.addStringProperty("popupContent", popupInfo);
@@ -672,4 +681,42 @@ public class DiffStudyService {
         return FeatureCollection.fromFeatures(Collections.emptyList()).toJson();
     }
 
+    public String getSubsJson(String diffStudyName) {
+        return getSubsJson(diffStudyName, DiffConfig.EPSILON_DEFAULT);
+    }
+
+    public String getSubsJson(String diffStudyName, double threshold) {
+        DiffStudy diffStudy = getDiffStudy(diffStudyName).block();
+        List<String> subsIds = diffStudy.getZone();
+
+        Map<String, LineDiffData> zoneBranchesMap = new HashMap<>();
+
+//        Network network1 = getNetwork(diffStudy.getNetwork1Uuid());
+//        Network network2 = getNetwork(diffStudy.getNetwork2Uuid());
+
+        //get network1 data
+        Mono<List<SubstationGeoData>> subsCoordsMono = getSubsCoordinates(diffStudy.getNetwork1Uuid());
+        List<SubstationGeoData> subsCoords = subsCoordsMono.block();
+
+        Map<String, SubstationGeoData> mapSubGeodata = subsCoords.stream()
+                .collect(Collectors.toMap(SubstationGeoData::getId, geoData -> geoData));
+
+        List<SubstationGeoData> retSubs = new ArrayList<>();
+        if (!subsIds.isEmpty()) {
+            retSubs = subsIds.stream().filter(mapSubGeodata::containsKey).map(mapSubGeodata::get).collect(Collectors.toList());
+            List<Feature> features = new ArrayList<>();
+            for (SubstationGeoData subData : retSubs) {
+                Coordinate subCoords = subData.getCoordinate();
+                Feature featureSub = Feature.fromGeometry(Point.fromLngLat(subCoords.getLon(), subCoords.getLat()));
+                featureSub.addStringProperty("id", subData.getId());
+                String popupInfo = "<p><b>substation " + subData.getId() + "</b></p>";
+                featureSub.addStringProperty("popupContent", popupInfo);
+
+                features.add(featureSub);
+            }
+            FeatureCollection featureCollection = FeatureCollection.fromFeatures(features);
+            return featureCollection.toJson();
+        }
+        return FeatureCollection.fromFeatures(Collections.emptyList()).toJson();
+    }
 }
