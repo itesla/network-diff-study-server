@@ -654,15 +654,14 @@ public class DiffStudyService {
                 String popupInfo = "<p><b>line " + lineData.getId() + "</b></p>";
                 if (zoneBranchesMap.containsKey(lineData.getId())) {
                     LineDiffData lineDiffData = zoneBranchesMap.get(lineData.getId());
-                    popupInfo = "<p><b>line <u>" + lineData.getId() + "</u></b></p>"
-                        + "<p><b>t1 delta p:</b> " + lineDiffData.getpDelta1() + "</p>"
-                        + "<p><b>t1 delta q:</b> " + lineDiffData.getqDelta1() + "</p>"
-                        + "<p><b>t1 delta i:</b> " + lineDiffData.getiDelta1() + "</p>"
-                        + "<p><b>t2 delta p:</b> " + lineDiffData.getpDelta2() + "</p>"
-                        + "<p><b>t2 delta q:</b> " + lineDiffData.getqDelta2() + "</p>"
-                        + "<p><b>t2 delta i:</b> " + lineDiffData.getiDelta2() + "</p>";
                     style.addProperty("color", "#FF0000");
                     featureLine.addStringProperty("isDifferent", "true");
+                    featureLine.addStringProperty("t1_dp", lineDiffData.getpDelta1());
+                    featureLine.addStringProperty("t1_dq", lineDiffData.getqDelta1());
+                    featureLine.addStringProperty("t1_di", lineDiffData.getiDelta1());
+                    featureLine.addStringProperty("t2_dp", lineDiffData.getpDelta2());
+                    featureLine.addStringProperty("t2_dq", lineDiffData.getqDelta2());
+                    featureLine.addStringProperty("t2_di", lineDiffData.getiDelta2());
                 } else {
                     style.addProperty("color", "#0000FF");
                     featureLine.addStringProperty("isDifferent", "false");
