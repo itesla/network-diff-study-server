@@ -8,6 +8,7 @@ package com.powsybl.diffserver;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mapbox.geojson.Feature;
 import com.mapbox.geojson.FeatureCollection;
@@ -651,7 +652,6 @@ public class DiffStudyService {
                 featureLine.addStringProperty("id", lineData.getId());
                 JsonObject style = new JsonObject();
                 style.addProperty("weight", 4);
-                String popupInfo = "<p><b>line " + lineData.getId() + "</b></p>";
                 if (zoneBranchesMap.containsKey(lineData.getId())) {
                     LineDiffData lineDiffData = zoneBranchesMap.get(lineData.getId());
                     style.addProperty("color", "#FF0000");
@@ -666,8 +666,6 @@ public class DiffStudyService {
                     style.addProperty("color", "#0000FF");
                     featureLine.addStringProperty("isDifferent", "false");
                 }
-
-                featureLine.addStringProperty("popupContent", popupInfo);
                 style.addProperty("opacity", 1);
                 style.addProperty("fillColor", "#FF0000");
                 style.addProperty("fillOpacity", 1);
@@ -690,7 +688,7 @@ public class DiffStudyService {
 
         Map<String, LineDiffData> zoneBranchesMap = new HashMap<>();
 
-//        Network network1 = getNetwork(diffStudy.getNetwork1Uuid());
+        Network network1 = getNetwork(diffStudy.getNetwork1Uuid());
 //        Network network2 = getNetwork(diffStudy.getNetwork2Uuid());
 
         //get network1 data
@@ -705,12 +703,11 @@ public class DiffStudyService {
             retSubs = subsIds.stream().filter(mapSubGeodata::containsKey).map(mapSubGeodata::get).collect(Collectors.toList());
             List<Feature> features = new ArrayList<>();
             for (SubstationGeoData subData : retSubs) {
+                List<String> subVlevelsIds = network1.getSubstation(subData.getId()).getVoltageLevelStream().map(VoltageLevel::getId).collect(Collectors.toList());
                 Coordinate subCoords = subData.getCoordinate();
                 Feature featureSub = Feature.fromGeometry(Point.fromLngLat(subCoords.getLon(), subCoords.getLat()));
                 featureSub.addStringProperty("id", subData.getId());
-                String popupInfo = "<p><b>substation " + subData.getId() + "</b></p>";
-                featureSub.addStringProperty("popupContent", popupInfo);
-
+                featureSub.addProperty("vlevels", subVlevelsIds.stream().collect(JsonArray::new, JsonArray::add, (ja1, ja2) -> ja2.add(ja2)));
                 features.add(featureSub);
             }
             FeatureCollection featureCollection = FeatureCollection.fromFeatures(features);
