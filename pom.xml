@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright (c) 2020, RTE (http://www.rte-france.com)
+    Copyright (c) 2020-2021, RTE (http://www.rte-france.com)
     This Source Code Form is subject to the terms of the Mozilla Public
     License, v. 2.0. If a copy of the MPL was not distributed with this
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -33,6 +33,7 @@
         <java.version>11</java.version>
 
         <guava.version>20.0</guava.version>
+        <mapbox-sdk-geojson.version>5.8.0</mapbox-sdk-geojson.version>
         <mockito.version>2.28.2</mockito.version>
         <springboot.version>2.1.5.RELEASE</springboot.version>
         <springfox.version>2.9.2</springfox.version>
@@ -101,7 +102,7 @@
         <dependency>
             <groupId>com.mapbox.mapboxsdk</groupId>
             <artifactId>mapbox-sdk-geojson</artifactId>
-            <version>5.8.0</version>
+            <version>${mapbox-sdk-geojson.version}</version>
         </dependency>
 
         <dependency>
