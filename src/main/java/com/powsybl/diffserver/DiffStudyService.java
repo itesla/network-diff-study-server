@@ -700,6 +700,13 @@ public class DiffStudyService {
         return getGeoJsonLayers(diffStudyName, DiffConfig.EPSILON_DEFAULT);
     }
 
+    private JsonObject wrapJsonWithMeta(String name, String data) {
+        JsonObject layerObj = new JsonObject();
+        layerObj.addProperty("name", name);
+        layerObj.addProperty("data", data);
+        return layerObj;
+    }
+
     public String getGeoJsonLayers(String diffStudyName, double threshold) {
         JsonObject retJson = new JsonObject();
         JsonArray jsonArray = new JsonArray();
@@ -723,44 +730,24 @@ public class DiffStudyService {
             Map<String, SubstationGeoData> allSubsGeodata = getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid());
             Map<String, SubstationGeoData> zoneSubsGeodata = subsIds.stream().filter(allSubsGeodata::containsKey).map(allSubsGeodata::get).collect(Collectors.toMap(SubstationGeoData::getId, t -> t));
             String subsgeoJson = extractJsonSubs(subsIds, subsDiffs, zoneSubsGeodata, network1);
-            JsonObject layerObj = new JsonObject();
-            layerObj.addProperty("name", "SUBS");
-            layerObj.addProperty("data", subsgeoJson);
-            jsonArray.add(layerObj);
+            jsonArray.add(wrapJsonWithMeta("SUBS", subsgeoJson));
 
             // lines geoJson (true coordinates) note: retrieve linesGeoData for all the network lines is quite expensive
             Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy.getNetwork1Uuid());
             List<String> zoneLines = getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
             String linesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData, subsDiffs, zoneLines);
-            layerObj = new JsonObject();
-            layerObj.addProperty("name", "LINES");
-            layerObj.addProperty("data", linesGeoJson);
-            jsonArray.add(layerObj);
+            jsonArray.add(wrapJsonWithMeta("LINES", linesGeoJson));
 
             //simple lines (connecting substations)
             Map<String, LineGeoData> networkLinesCoordsData2 = getLinesCoordinatesConnectingSubstationsAsMap(network1, zoneLines,
                     getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid()));
             String simpleLinesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData2, subsDiffs, zoneLines);
-            layerObj = new JsonObject();
-            layerObj.addProperty("name", "LINES-SIMPLE");
-            layerObj.addProperty("data", simpleLinesGeoJson);
-            jsonArray.add(layerObj);
+            jsonArray.add(wrapJsonWithMeta("LINES-SIMPLE", simpleLinesGeoJson));
         } else {
             //return empty layers
-            JsonObject layerObj = new JsonObject();
-            layerObj.addProperty("name", "SUBS");
-            layerObj.addProperty("data", emptyGeoJson);
-            jsonArray.add(layerObj);
-
-            layerObj = new JsonObject();
-            layerObj.addProperty("name", "LINES");
-            layerObj.addProperty("data", emptyGeoJson);
-            jsonArray.add(layerObj);
-
-            layerObj = new JsonObject();
-            layerObj.addProperty("name", "LINES-SIMPLE");
-            layerObj.addProperty("data", emptyGeoJson);
-            jsonArray.add(layerObj);
+            jsonArray.add(wrapJsonWithMeta("SUBS", emptyGeoJson));
+            jsonArray.add(wrapJsonWithMeta("LINES", emptyGeoJson));
+            jsonArray.add(wrapJsonWithMeta("LINES-SIMPLE", emptyGeoJson));
         }
 
         retJson.add("layers", jsonArray);
