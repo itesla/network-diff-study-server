@@ -24,6 +24,7 @@ import com.powsybl.diffserver.repository.DiffStudyRepository;
 import com.powsybl.iidm.diff.*;
 import com.powsybl.iidm.network.*;
 import com.powsybl.network.store.client.NetworkStoreService;
+import com.powsybl.network.store.client.PreloadingStrategy;
 import com.powsybl.network.store.model.TopLevelDocument;
 import org.gridsuite.geodata.extensions.Coordinate;
 import org.gridsuite.geodata.server.dto.LineGeoData;
@@ -56,6 +57,7 @@ import java.net.URLEncoder;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -572,7 +574,7 @@ public class DiffStudyService {
 
     private Network getNetwork(UUID networkUuid) {
         try {
-            return networkStoreService.getNetwork(networkUuid);
+            return networkStoreService.getNetwork(networkUuid, PreloadingStrategy.NONE);
         } catch (PowsyblException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Network '" + networkUuid + "' not found");
         }
@@ -753,6 +755,7 @@ public class DiffStudyService {
         for (String subId : subsIds) {
             DiffData diffData = subsDiffs.get(subId);
             SubstationGeoData subData = zoneSubsGeodata.get(subId);
+            AtomicBoolean isSubDifferent = new AtomicBoolean(false);
             if (subData != null) {
                 //sub data
                 Substation substation = network1.getSubstation(subId);
@@ -770,6 +773,7 @@ public class DiffStudyService {
                         vlJson.addProperty("isDifferent", "true");
                         vlJson.addProperty("minVDelta", vlDiffData.getMinVDelta());
                         vlJson.addProperty("maxVDelta", vlDiffData.getMaxVDelta());
+                        isSubDifferent.set(true);
                     } else {
                         vlJson.addProperty("isDifferent", "false");
                     }
@@ -778,6 +782,7 @@ public class DiffStudyService {
 
                 Feature featureSub = Feature.fromGeometry(Point.fromLngLat(subCoords.getLon(), subCoords.getLat()));
                 featureSub.addStringProperty("id", subData.getId());
+                featureSub.addBooleanProperty("isDifferent", isSubDifferent.get());
                 featureSub.addProperty("vlevels", vlJsonMap.values().stream().collect(JsonArray::new, JsonArray::add, (ja1, ja2) -> ja2.add(ja2)));
                 features.add(featureSub);
             } else {
