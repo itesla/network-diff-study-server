@@ -8,6 +8,10 @@ package com.powsybl.diffserver;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mapbox.geojson.Feature;
@@ -56,6 +60,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -234,6 +240,10 @@ public class DiffStudyService {
 
     private final String emptyGeoJson = FeatureCollection.fromFeatures(Collections.emptyList()).toJson();
 
+    final Cache<UUID, Map<String, SubstationGeoData>> subsGeoCache;
+
+    final Cache<UUID, Map<String, LineGeoData>> linesGeoCache;
+
     @Autowired
     private NetworkStoreService networkStoreService;
 
@@ -245,7 +255,8 @@ public class DiffStudyService {
             @Value("${backing-services.network-diff.base-uri:http://network-diff-server/}") String networkDiffServerBaseUri,
             @Value("${backing-services.geo-server.base-uri:http://geo-data-server/}") String geoServerBaseUri,
             DiffStudyRepository studyRepository,
-            WebClient.Builder webClientBuilder) {
+            WebClient.Builder webClientBuilder,
+            @Value("${network-diff-study-server-config.geoCacheSize:5}") int geoCacheSize) {
         this.caseServerBaseUri = caseServerBaseUri;
         this.networkConversionServerBaseUri = networkConversionServerBaseUri;
         this.networkStoreServerBaseUri = networkStoreServerBaseUri;
@@ -255,6 +266,28 @@ public class DiffStudyService {
         this.webClient = webClientBuilder.build();
 
         this.diffStudyRepository = studyRepository;
+
+        LOGGER.info("Cache size for geo data: {}", geoCacheSize);
+        this.subsGeoCache = CacheBuilder.newBuilder()
+                .maximumSize(geoCacheSize)
+                .removalListener(new RemovalListener<UUID, Map<String, SubstationGeoData>>() {
+                    @Override
+                    public void onRemoval(RemovalNotification<UUID, Map<String, SubstationGeoData>> removalNotification) {
+                        removalNotification.getValue().keySet().size();
+                        LOGGER.info("substations geo data cache, removing entry for network: {}, cause: {}", removalNotification.getKey(), removalNotification.getCause());
+                    }
+                })
+                .build();
+
+        this.linesGeoCache = CacheBuilder.newBuilder()
+                .maximumSize(geoCacheSize)
+                .removalListener(new RemovalListener<UUID, Map<String, LineGeoData>>() {
+                    @Override
+                    public void onRemoval(RemovalNotification<UUID, Map<String, LineGeoData>> removalNotification) {
+                        LOGGER.info("lines geo data cache, removing entry for network: {}, cause: {}", removalNotification.getKey(), removalNotification.getCause());
+                    }
+                })
+                .build();
     }
 
     Flux<DiffStudyInfos> getDiffStudyList() {
@@ -333,7 +366,9 @@ public class DiffStudyService {
         Mono<DiffStudy> studyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
         return studyMono.switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
                 .flatMap(study ->
-                        Mono.zip(deleteNetwork(study.getNetwork1Uuid()),
+                        Mono.zip(
+                                Mono.fromRunnable(() -> removeGeoDataFromCache(study)),
+                                deleteNetwork(study.getNetwork1Uuid()),
                                 deleteNetwork(study.getNetwork2Uuid()))
                                 .then(diffStudyRepository.delete(study))
                 );
@@ -427,6 +462,13 @@ public class DiffStudyService {
                 .uri(networkStoreServerBaseUri + path)
                 .retrieve()
                 .bodyToMono(Void.class);
+    }
+
+    private void removeGeoDataFromCache(DiffStudy study) {
+        linesGeoCache.invalidate(study.getNetwork1Uuid());
+        linesGeoCache.invalidate(study.getNetwork2Uuid());
+        subsGeoCache.invalidate(study.getNetwork1Uuid());
+        subsGeoCache.invalidate(study.getNetwork2Uuid());
     }
 
     Mono<Boolean> caseExists(UUID caseUuid) {
@@ -614,8 +656,17 @@ public class DiffStudyService {
     }
 
     public Map<String, LineGeoData> getLinesCoordinatesAsMap(UUID networkUuid) {
-        return Arrays.stream(getLinesCoordinates(networkUuid))
-                .collect(Collectors.toMap(LineGeoData::getId, geoData -> geoData));
+        try {
+            return linesGeoCache.get(networkUuid, new Callable<Map<String, LineGeoData>>() {
+                @Override
+                public Map<String, LineGeoData> call() {
+                    return Arrays.stream(getLinesCoordinates(networkUuid))
+                            .collect(Collectors.toMap(LineGeoData::getId, geoData -> geoData));
+                }
+            });
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private Map<String, LineGeoData> getLinesCoordinatesConnectingSubstationsAsMap(Network network, List<String> zoneLines, Map<String, SubstationGeoData> subsCoordsMap) {
@@ -677,8 +728,17 @@ public class DiffStudyService {
     }
 
     private Map<String, SubstationGeoData> getSubsCoordinatesAsMap(UUID networkUuid) {
-        return Arrays.stream(getSubsCoordinates(networkUuid))
-                .collect(Collectors.toMap(SubstationGeoData::getId, geoData -> geoData));
+        try {
+            return subsGeoCache.get(networkUuid, new Callable<Map<String, SubstationGeoData>>() {
+                @Override
+                public Map<String, SubstationGeoData> call() {
+                    return Arrays.stream(getSubsCoordinates(networkUuid))
+                            .collect(Collectors.toMap(SubstationGeoData::getId, geoData -> geoData));
+                }
+            });
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private List<SubstationGeoData> getSubsGeoData(DiffStudy diffStudy) {
@@ -767,7 +827,6 @@ public class DiffStudyService {
                 Map<String, VlDiffData> vlDiffDataMap = diffData.getVlDiffData();
                 Coordinate subCoords = subData.getCoordinate();
                 List<String> subVlevelsIds = substation.getVoltageLevelStream().map(VoltageLevel::getId).collect(Collectors.toList());
-                //Map<String, VlDiffData> finalVlDiffDataMap = vlDiffDataMap;
                 Map<String, JsonObject> vlJsonMap = new HashMap<>();
                 subVlevelsIds.stream().forEach(vlId -> {
                     JsonObject vlJson = new JsonObject();
