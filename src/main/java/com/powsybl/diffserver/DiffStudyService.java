@@ -756,10 +756,6 @@ public class DiffStudyService {
         return getSubsGeoData(diffStudy);
     }
 
-    public String getGeoJsonLayers(String diffStudyName) {
-        return getGeoJsonLayers(diffStudyName, DiffConfig.EPSILON_DEFAULT);
-    }
-
     private JsonObject wrapJsonWithMeta(String name, String data) {
         JsonObject layerObj = new JsonObject();
         layerObj.addProperty("name", name);
@@ -767,7 +763,7 @@ public class DiffStudyService {
         return layerObj;
     }
 
-    public String getGeoJsonLayers(String diffStudyName, double threshold) {
+    public String getGeoJsonLayers(String diffStudyName, double threshold, List<String> layersIds) {
         JsonObject retJson = new JsonObject();
         JsonArray jsonArray = new JsonArray();
 
@@ -785,24 +781,30 @@ public class DiffStudyService {
                 subsDiffs.put(subId, diffData);
             }
 
-            //subs geoJson
-            // map subId, substationGeoData
-            Map<String, SubstationGeoData> allSubsGeodata = getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid());
-            Map<String, SubstationGeoData> zoneSubsGeodata = subsIds.stream().filter(allSubsGeodata::containsKey).map(allSubsGeodata::get).collect(Collectors.toMap(SubstationGeoData::getId, t -> t));
-            String subsgeoJson = extractJsonSubs(subsIds, subsDiffs, zoneSubsGeodata, network1);
-            jsonArray.add(wrapJsonWithMeta("SUBS", subsgeoJson));
+            if (layersIds.contains("SUBS")) {
+                //subs geoJson
+                // map subId, substationGeoData
+                Map<String, SubstationGeoData> allSubsGeodata = getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid());
+                Map<String, SubstationGeoData> zoneSubsGeodata = subsIds.stream().filter(allSubsGeodata::containsKey).map(allSubsGeodata::get).collect(Collectors.toMap(SubstationGeoData::getId, t -> t));
+                String subsgeoJson = extractJsonSubs(subsIds, subsDiffs, zoneSubsGeodata, network1);
+                jsonArray.add(wrapJsonWithMeta("SUBS", subsgeoJson));
+            }
 
-            // lines geoJson (true coordinates) note: retrieve linesGeoData for all the network lines is quite expensive
-            Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy.getNetwork1Uuid());
             List<String> zoneLines = getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
-            String linesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData, subsDiffs, zoneLines);
-            jsonArray.add(wrapJsonWithMeta("LINES", linesGeoJson));
+            if (layersIds.contains("LINES")) {
+                // lines geoJson (true coordinates) note: retrieve linesGeoData for all the network lines is quite expensive
+                Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy.getNetwork1Uuid());
+                String linesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData, subsDiffs, zoneLines);
+                jsonArray.add(wrapJsonWithMeta("LINES", linesGeoJson));
+            }
 
-            //simple lines (connecting substations)
-            Map<String, LineGeoData> networkLinesCoordsData2 = getLinesCoordinatesConnectingSubstationsAsMap(network1, zoneLines,
-                    getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid()));
-            String simpleLinesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData2, subsDiffs, zoneLines);
-            jsonArray.add(wrapJsonWithMeta("LINES-SIMPLE", simpleLinesGeoJson));
+            if (layersIds.contains("LINES-SIMPLE")) {
+                //simple lines (connecting substations)
+                Map<String, LineGeoData> networkLinesCoordsData2 = getLinesCoordinatesConnectingSubstationsAsMap(network1, zoneLines,
+                        getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid()));
+                String simpleLinesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData2, subsDiffs, zoneLines);
+                jsonArray.add(wrapJsonWithMeta("LINES-SIMPLE", simpleLinesGeoJson));
+            }
         } else {
             //return empty layers
             jsonArray.add(wrapJsonWithMeta("SUBS", emptyGeoJson));
