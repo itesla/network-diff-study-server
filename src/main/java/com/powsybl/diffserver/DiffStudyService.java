@@ -435,8 +435,16 @@ public class DiffStudyService {
         return mono.map(t -> t.getData().stream().map(e -> e.getId()).distinct().collect(Collectors.toList()));
     }
 
-    public Mono<List<VoltageLevelAttributes>> getDiffStudyVoltageLevels(DiffStudy diffStudy) {
-        Objects.requireNonNull(diffStudy);
+    public Mono<List<VoltageLevelAttributes>> getDiffStudyVoltageLevels(String diffStudyName) {
+        Objects.requireNonNull(diffStudyName);
+        DiffStudy diffStudy = getDiffStudy(diffStudyName)
+                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
+                .block();
+        return getDiffStudyVoltageLevels(diffStudy);
+    }
+
+    private Mono<List<VoltageLevelAttributes>> getDiffStudyVoltageLevels(DiffStudy diffStudy) {
+
         return Mono.zip(getNetworkVoltageLevels(diffStudy.getNetwork1Uuid()),
                 getNetworkVoltageLevels(diffStudy.getNetwork2Uuid()))
                 .flatMap(t -> {
@@ -509,9 +517,17 @@ public class DiffStudyService {
         this.networkStoreServerBaseUri = networkStoreServerBaseUri + DELIMITER;
     }
 
-    public Mono<String> getDiffVoltageLevel(DiffStudy diffStudy, String voltageLevelId) {
-        Objects.requireNonNull(diffStudy);
+    public Mono<String> getDiffVoltageLevel(String diffStudyName, String voltageLevelId) {
+        Objects.requireNonNull(diffStudyName);
         Objects.requireNonNull(voltageLevelId);
+
+        DiffStudy diffStudy = getDiffStudy(diffStudyName)
+                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
+                .block();
+        return getDiffVoltageLevel(diffStudy, voltageLevelId);
+    }
+
+    private Mono<String> getDiffVoltageLevel(DiffStudy diffStudy, String voltageLevelId) {
         String path = UriComponentsBuilder.fromPath(DELIMITER + CASE_API_VERSION + "/networks/{network1Uuid}/diff/{network2Uuid}/vl/{vlId}")
                 .buildAndExpand(diffStudy.getNetwork1Uuid(), diffStudy.getNetwork2Uuid(), voltageLevelId)
                 .toUriString();

@@ -29,8 +29,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.*;
 
-import static com.powsybl.diffserver.DiffStudyConstants.DIFF_STUDY_DOESNT_EXISTS;
-
 /**
  * @author Christian Biasuzzi <christian.biasuzzi@techrain.eu>
  */
@@ -75,7 +73,9 @@ public class DiffStudyController {
             @ApiResponse(code = 404, message = "The study doesn't exist")})
     public ResponseEntity<Mono<DiffStudy>> getStudy(@PathVariable("diffStudyName") String diffStudyName) {
         Mono<DiffStudy> studyMono = diffStudyService.getDiffStudy(diffStudyName);
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(studyMono.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND))).then(studyMono));
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
+                .body(studyMono.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND)))
+                        .then(studyMono));
     }
 
     @GetMapping(value = "/diff-studies/{diffStudyName}/exists")
@@ -97,11 +97,8 @@ public class DiffStudyController {
     @ApiResponse(code = 200, message = "The voltage level list")
     public ResponseEntity<Mono<List<VoltageLevelAttributes>>> getNetworkVoltageLevels(
             @PathVariable("diffStudyName") String diffStudyName) {
-        DiffStudy diffStudy = diffStudyService.getDiffStudy(diffStudyName)
-                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
-                .block();
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
-                .body(diffStudyService.getDiffStudyVoltageLevels(diffStudy));
+                .body(diffStudyService.getDiffStudyVoltageLevels(diffStudyName));
     }
 
     @GetMapping(value = "diff-studies/{diffStudyName}/voltage-level-diff")
@@ -110,11 +107,8 @@ public class DiffStudyController {
     public ResponseEntity<Mono<String>> getVoltageLevelDiff(
             @PathVariable("diffStudyName") String diffStudyName,
             @RequestParam("voltageLevelId") String voltageLevelId) {
-        DiffStudy diffStudy = diffStudyService.getDiffStudy(diffStudyName)
-                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
-                .block();
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(
-                diffStudyService.getDiffVoltageLevel(diffStudy, voltageLevelId)
+                diffStudyService.getDiffVoltageLevel(diffStudyName, voltageLevelId)
         );
     }
 
