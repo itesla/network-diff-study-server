@@ -52,8 +52,6 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -62,7 +60,6 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -299,6 +296,10 @@ public class DiffStudyService {
 
     @Transactional
     public Mono<DiffStudy> createDiffStudy(String diffStudyName, UUID case1Uuid, UUID case2Uuid, String description) {
+        Objects.requireNonNull(diffStudyName);
+        Objects.requireNonNull(case1Uuid);
+        Objects.requireNonNull(case2Uuid);
+        Objects.requireNonNull(description);
         Mono<NetworkInfos> network1Infos = persistentStore(case1Uuid);
         Mono<NetworkInfos> network2Infos = persistentStore(case2Uuid);
         Mono<String> case1Format = getCaseFormat(case1Uuid);
@@ -328,6 +329,10 @@ public class DiffStudyService {
 
     @Transactional
     public Mono<DiffStudy> createDiffStudy(String diffStudyName, Mono<FilePart> case1File, Mono<FilePart> case2File, String description) {
+        Objects.requireNonNull(diffStudyName);
+        Objects.requireNonNull(case1File);
+        Objects.requireNonNull(case2File);
+        Objects.requireNonNull(description);
         Mono<UUID> case1UUid = importCase(case1File);
         Mono<UUID> case2UUid = importCase(case1File);
 
@@ -363,11 +368,12 @@ public class DiffStudyService {
 
     @Transactional
     public Mono<Void> deleteDiffStudy(String diffStudyName) {
+        Objects.requireNonNull(diffStudyName);
+        removeGeoDataFromCache(diffStudyName);
         Mono<DiffStudy> studyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
         return studyMono.switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
                 .flatMap(study ->
                         Mono.zip(
-                                Mono.fromRunnable(() -> removeGeoDataFromCache(study)),
                                 deleteNetwork(study.getNetwork1Uuid()),
                                 deleteNetwork(study.getNetwork2Uuid()))
                                 .then(diffStudyRepository.delete(study))
@@ -400,20 +406,6 @@ public class DiffStudyService {
                 .bodyToMono(NetworkInfos.class);
     }
 
-    private Mono<NetworkInfos> persistentStoreFake(UUID caseUuid) {
-        UUID fakeNetworkUuid = UUID.randomUUID();
-        NetworkInfos netinfo = new NetworkInfos(fakeNetworkUuid, "fake - " + fakeNetworkUuid + "(for caseUuid " + caseUuid + ")");
-        Scheduler singleThread = Schedulers.single();
-        return Mono.just(netinfo).publishOn(singleThread).map(n -> {
-            try {
-                TimeUnit.SECONDS.sleep(20);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            return netinfo;
-        });
-    }
-
     // This functions call directly the network store server without using the dedicated client because it's a blocking client.
     Mono<List<VoltageLevelAttributes>> getNetworkVoltageLevels(UUID networkUuid) {
         String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/voltage-levels")
@@ -444,6 +436,7 @@ public class DiffStudyService {
     }
 
     public Mono<List<VoltageLevelAttributes>> getDiffStudyVoltageLevels(DiffStudy diffStudy) {
+        Objects.requireNonNull(diffStudy);
         return Mono.zip(getNetworkVoltageLevels(diffStudy.getNetwork1Uuid()),
                 getNetworkVoltageLevels(diffStudy.getNetwork2Uuid()))
                 .flatMap(t -> {
@@ -458,10 +451,18 @@ public class DiffStudyService {
         String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}")
                 .buildAndExpand(networkUuid)
                 .toUriString();
+        LOGGER.info("deleting network {}", networkUuid);
         return webClient.delete()
                 .uri(networkStoreServerBaseUri + path)
                 .retrieve()
                 .bodyToMono(Void.class);
+    }
+
+    private void removeGeoDataFromCache(String diffStudyName) {
+        DiffStudy diffStudy = getDiffStudy(diffStudyName)
+                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
+                .block();
+        removeGeoDataFromCache(diffStudy);
     }
 
     private void removeGeoDataFromCache(DiffStudy study) {
@@ -517,6 +518,8 @@ public class DiffStudyService {
     }
 
     public Mono<String> getDiffVoltageLevel(DiffStudy diffStudy, String voltageLevelId) {
+        Objects.requireNonNull(diffStudy);
+        Objects.requireNonNull(voltageLevelId);
         String path = UriComponentsBuilder.fromPath(DELIMITER + CASE_API_VERSION + "/networks/{network1Uuid}/diff/{network2Uuid}/vl/{vlId}")
                 .buildAndExpand(diffStudy.getNetwork1Uuid(), diffStudy.getNetwork2Uuid(), voltageLevelId)
                 .toUriString();
@@ -537,6 +540,8 @@ public class DiffStudyService {
     }
 
     public Mono<DiffStudy> setZone(String diffStudyName, List<String> zone) {
+        Objects.requireNonNull(diffStudyName);
+        Objects.requireNonNull(zone);
         Mono<DiffStudy> diffStudyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
         return diffStudyMono
                 .log()
@@ -548,6 +553,8 @@ public class DiffStudyService {
     }
 
     public Mono<DiffStudy> setDescription(String diffStudyName, String description) {
+        Objects.requireNonNull(diffStudyName);
+        Objects.requireNonNull(description);
         Mono<DiffStudy> diffStudyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
         return diffStudyMono
                 .log()
@@ -558,7 +565,7 @@ public class DiffStudyService {
                 });
     }
 
-    public Mono<List<String>> getSubstationsIds(String diffStudyName) {
+    private Mono<List<String>> getSubstationsIds(String diffStudyName) {
         return getDiffStudy(diffStudyName)
                 .flatMap(s -> getDiffStudyVoltageLevels(s))
                 .flatMapIterable(Function.identity())
@@ -569,11 +576,14 @@ public class DiffStudyService {
     }
 
     public Mono<List<String>> getNoMatchingSubstations(String diffStudyName, List<String> zone) {
+        Objects.requireNonNull(diffStudyName);
+        Objects.requireNonNull(zone);
         List<String> subsIds = getSubstationsIds(diffStudyName).block();
         return Mono.just(zone.stream().filter(zs -> !subsIds.contains(zs)).collect(Collectors.toList()));
     }
 
     public Flux<CaseInfos> searchCase(String query) {
+        Objects.requireNonNull(query);
         String encodedQuery;
         try {
             encodedQuery = URLEncoder.encode(query, "UTF-8");
@@ -602,7 +612,7 @@ public class DiffStudyService {
 
     }
 
-    public SubstationGeoData[] getSubsCoordinates(UUID networkUuid) {
+    private SubstationGeoData[] getSubsCoordinates(UUID networkUuid) {
 
         String path = UriComponentsBuilder.fromPath("/v1/substations?networkUuid={networkUuid}")
                 .buildAndExpand(networkUuid)
@@ -626,7 +636,7 @@ public class DiffStudyService {
         }
     }
 
-    public List<String> getZoneLines(UUID networkUuid, List<String> zone) {
+    private List<String> getZoneLines(UUID networkUuid, List<String> zone) {
         try {
             Network network = getNetwork(networkUuid);
             List<String> zoneLines = zone.stream().map(s -> network.getSubstation(s).getVoltageLevelStream().flatMap(vl -> vl.getConnectableStream(Line.class))
@@ -651,11 +661,7 @@ public class DiffStudyService {
         return results;
     }
 
-    public List<LineGeoData> getLinesCoordinatesList(UUID networkUuid) {
-        return Arrays.asList(getLinesCoordinates(networkUuid));
-    }
-
-    public Map<String, LineGeoData> getLinesCoordinatesAsMap(UUID networkUuid) {
+    private Map<String, LineGeoData> getLinesCoordinatesAsMap(UUID networkUuid) {
         try {
             return linesGeoCache.get(networkUuid, new Callable<Map<String, LineGeoData>>() {
                 @Override
@@ -752,7 +758,10 @@ public class DiffStudyService {
     }
 
     public List<SubstationGeoData> getSubsGeoData(String diffStudyName) {
-        DiffStudy diffStudy = getDiffStudy(diffStudyName).block();
+        Objects.requireNonNull(diffStudyName);
+        DiffStudy diffStudy = getDiffStudy(diffStudyName)
+                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
+                .block();
         return getSubsGeoData(diffStudy);
     }
 
@@ -764,10 +773,17 @@ public class DiffStudyService {
     }
 
     public String getGeoJsonLayers(String diffStudyName, double threshold, List<String> layersIds) {
+        Objects.requireNonNull(diffStudyName);
+        Objects.requireNonNull(layersIds);
         JsonObject retJson = new JsonObject();
         JsonArray jsonArray = new JsonArray();
 
-        DiffStudy diffStudy = getDiffStudy(diffStudyName).block();
+        if (layersIds.size() == 0) {
+            throw new RuntimeException("at least one layer type id is required");
+        }
+        DiffStudy diffStudy = getDiffStudy(diffStudyName)
+                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
+                .block();
         List<String> subsIds = diffStudy.getZone();
         if (!subsIds.isEmpty()) {
             Network network1 = getNetwork(diffStudy.getNetwork1Uuid());
