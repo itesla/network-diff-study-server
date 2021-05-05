@@ -467,9 +467,7 @@ public class DiffStudyService {
 
     private void removeGeoDataFromCache(DiffStudy study) {
         linesGeoCache.invalidate(study.getNetwork1Uuid());
-        linesGeoCache.invalidate(study.getNetwork2Uuid());
         subsGeoCache.invalidate(study.getNetwork1Uuid());
-        subsGeoCache.invalidate(study.getNetwork2Uuid());
     }
 
     Mono<Boolean> caseExists(UUID caseUuid) {
@@ -669,12 +667,12 @@ public class DiffStudyService {
         return results;
     }
 
-    private Map<String, LineGeoData> getLinesCoordinatesAsMap(UUID networkUuid) {
+    private Map<String, LineGeoData> getLinesCoordinatesAsMap(DiffStudy study) {
         try {
-            return linesGeoCache.get(networkUuid, new Callable<Map<String, LineGeoData>>() {
+            return linesGeoCache.get(study.getNetwork1Uuid(), new Callable<Map<String, LineGeoData>>() {
                 @Override
                 public Map<String, LineGeoData> call() {
-                    return Arrays.stream(getLinesCoordinates(networkUuid))
+                    return Arrays.stream(getLinesCoordinates(study.getNetwork1Uuid()))
                             .collect(Collectors.toMap(LineGeoData::getId, geoData -> geoData));
                 }
             });
@@ -741,12 +739,12 @@ public class DiffStudyService {
         return jsonDiff;
     }
 
-    private Map<String, SubstationGeoData> getSubsCoordinatesAsMap(UUID networkUuid) {
+    private Map<String, SubstationGeoData> getSubsCoordinatesAsMap(DiffStudy study) {
         try {
-            return subsGeoCache.get(networkUuid, new Callable<Map<String, SubstationGeoData>>() {
+            return subsGeoCache.get(study.getNetwork1Uuid(), new Callable<Map<String, SubstationGeoData>>() {
                 @Override
                 public Map<String, SubstationGeoData> call() {
-                    return Arrays.stream(getSubsCoordinates(networkUuid))
+                    return Arrays.stream(getSubsCoordinates(study.getNetwork1Uuid()))
                             .collect(Collectors.toMap(SubstationGeoData::getId, geoData -> geoData));
                 }
             });
@@ -758,7 +756,7 @@ public class DiffStudyService {
     private List<SubstationGeoData> getSubsGeoData(DiffStudy diffStudy) {
         List<String> subsIds = diffStudy.getZone();
         if (!subsIds.isEmpty()) {
-            Map<String, SubstationGeoData> mapSubGeodata = getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid());
+            Map<String, SubstationGeoData> mapSubGeodata = getSubsCoordinatesAsMap(diffStudy);
             return subsIds.stream().filter(mapSubGeodata::containsKey).map(mapSubGeodata::get).collect(Collectors.toList());
         } else {
             return Collections.emptyList();
@@ -808,7 +806,7 @@ public class DiffStudyService {
             if (layersIds.contains("SUBS")) {
                 //subs geoJson
                 // map subId, substationGeoData
-                Map<String, SubstationGeoData> allSubsGeodata = getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid());
+                Map<String, SubstationGeoData> allSubsGeodata = getSubsCoordinatesAsMap(diffStudy);
                 Map<String, SubstationGeoData> zoneSubsGeodata = subsIds.stream().filter(allSubsGeodata::containsKey).map(allSubsGeodata::get).collect(Collectors.toMap(SubstationGeoData::getId, t -> t));
                 String subsgeoJson = extractJsonSubs(subsIds, subsDiffs, zoneSubsGeodata, network1);
                 jsonArray.add(wrapJsonWithMeta("SUBS", subsgeoJson));
@@ -817,7 +815,7 @@ public class DiffStudyService {
             List<String> zoneLines = getZoneLines(diffStudy.getNetwork1Uuid(), diffStudy.getZone());
             if (layersIds.contains("LINES")) {
                 // lines geoJson (true coordinates) note: retrieve linesGeoData for all the network lines is quite expensive
-                Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy.getNetwork1Uuid());
+                Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy);
                 String linesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData, subsDiffs, zoneLines);
                 jsonArray.add(wrapJsonWithMeta("LINES", linesGeoJson));
             }
@@ -825,7 +823,7 @@ public class DiffStudyService {
             if (layersIds.contains("LINES-SIMPLE")) {
                 //simple lines (connecting substations)
                 Map<String, LineGeoData> networkLinesCoordsData2 = getLinesCoordinatesConnectingSubstationsAsMap(network1, zoneLines,
-                        getSubsCoordinatesAsMap(diffStudy.getNetwork1Uuid()));
+                        getSubsCoordinatesAsMap(diffStudy));
                 String simpleLinesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData2, subsDiffs, zoneLines);
                 jsonArray.add(wrapJsonWithMeta("LINES-SIMPLE", simpleLinesGeoJson));
             }
