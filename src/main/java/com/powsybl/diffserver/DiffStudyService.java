@@ -369,11 +369,11 @@ public class DiffStudyService {
     @Transactional
     public Mono<Void> deleteDiffStudy(String diffStudyName) {
         Objects.requireNonNull(diffStudyName);
-        removeGeoDataFromCache(diffStudyName);
         Mono<DiffStudy> studyMono = diffStudyRepository.findByDiffStudyName(diffStudyName);
         return studyMono.switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
                 .flatMap(study ->
-                        Mono.zip(
+                        Mono.whenDelayError(
+                                Mono.fromRunnable(() -> removeGeoDataFromCache(study)),
                                 deleteNetwork(study.getNetwork1Uuid()),
                                 deleteNetwork(study.getNetwork2Uuid()))
                                 .then(diffStudyRepository.delete(study))
@@ -451,18 +451,10 @@ public class DiffStudyService {
         String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}")
                 .buildAndExpand(networkUuid)
                 .toUriString();
-        LOGGER.info("deleting network {}", networkUuid);
         return webClient.delete()
                 .uri(networkStoreServerBaseUri + path)
                 .retrieve()
                 .bodyToMono(Void.class);
-    }
-
-    private void removeGeoDataFromCache(String diffStudyName) {
-        DiffStudy diffStudy = getDiffStudy(diffStudyName)
-                .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
-                .block();
-        removeGeoDataFromCache(diffStudy);
     }
 
     private void removeGeoDataFromCache(DiffStudy study) {
