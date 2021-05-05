@@ -289,7 +289,7 @@ public class DiffStudyService {
 
     Flux<DiffStudyInfos> getDiffStudyList() {
         Flux<DiffStudy> diffStudyFlux = diffStudyRepository.findAll();
-        return diffStudyFlux.map(diffStudy ->
+        return diffStudyFlux.sort(Comparator.comparing(DiffStudy::getDiffStudyName)).map(diffStudy ->
                 new DiffStudyInfos(diffStudy.getDiffStudyName(), diffStudy.getDescription(), diffStudy.getNetwork1Id(), diffStudy.getCase1Format(), diffStudy.getNetwork2Id(), diffStudy.getCase2Format(), diffStudy.getZone().toArray(String[]::new))
         );
     }
