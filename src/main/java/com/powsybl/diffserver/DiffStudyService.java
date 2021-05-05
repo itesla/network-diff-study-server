@@ -271,7 +271,7 @@ public class DiffStudyService {
                     @Override
                     public void onRemoval(RemovalNotification<UUID, Map<String, SubstationGeoData>> removalNotification) {
                         removalNotification.getValue().keySet().size();
-                        LOGGER.info("substations geo data cache, removing entry for network: {}, cause: {}", removalNotification.getKey(), removalNotification.getCause());
+                        LOGGER.info("substations geo data cache, removing entry: {}, cause: {}", removalNotification.getKey(), removalNotification.getCause());
                     }
                 })
                 .build();
@@ -281,7 +281,7 @@ public class DiffStudyService {
                 .removalListener(new RemovalListener<UUID, Map<String, LineGeoData>>() {
                     @Override
                     public void onRemoval(RemovalNotification<UUID, Map<String, LineGeoData>> removalNotification) {
-                        LOGGER.info("lines geo data cache, removing entry for network: {}, cause: {}", removalNotification.getKey(), removalNotification.getCause());
+                        LOGGER.info("lines geo data cache, removing entry for: {}, cause: {}", removalNotification.getKey(), removalNotification.getCause());
                     }
                 })
                 .build();
@@ -466,8 +466,8 @@ public class DiffStudyService {
     }
 
     private void removeGeoDataFromCache(DiffStudy study) {
-        linesGeoCache.invalidate(study.getNetwork1Uuid());
-        subsGeoCache.invalidate(study.getNetwork1Uuid());
+        linesGeoCache.invalidate(study.getCase1Uuid());
+        subsGeoCache.invalidate(study.getCase1Uuid());
     }
 
     Mono<Boolean> caseExists(UUID caseUuid) {
@@ -669,7 +669,7 @@ public class DiffStudyService {
 
     private Map<String, LineGeoData> getLinesCoordinatesAsMap(DiffStudy study) {
         try {
-            return linesGeoCache.get(study.getNetwork1Uuid(), new Callable<Map<String, LineGeoData>>() {
+            return linesGeoCache.get(study.getCase1Uuid(), new Callable<Map<String, LineGeoData>>() {
                 @Override
                 public Map<String, LineGeoData> call() {
                     return Arrays.stream(getLinesCoordinates(study.getNetwork1Uuid()))
@@ -741,7 +741,7 @@ public class DiffStudyService {
 
     private Map<String, SubstationGeoData> getSubsCoordinatesAsMap(DiffStudy study) {
         try {
-            return subsGeoCache.get(study.getNetwork1Uuid(), new Callable<Map<String, SubstationGeoData>>() {
+            return subsGeoCache.get(study.getCase1Uuid(), new Callable<Map<String, SubstationGeoData>>() {
                 @Override
                 public Map<String, SubstationGeoData> call() {
                     return Arrays.stream(getSubsCoordinates(study.getNetwork1Uuid()))
