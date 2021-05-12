@@ -107,12 +107,13 @@
 
         <dependency>
             <groupId>com.powsybl</groupId>
-            <artifactId>powsybl-iidm-api</artifactId>
+            <artifactId>network-diff-iidm</artifactId>
             <version>${powsybl-core.version}</version>
         </dependency>
+
         <dependency>
             <groupId>com.powsybl</groupId>
-            <artifactId>powsybl-iidm-diff</artifactId>
+            <artifactId>powsybl-iidm-api</artifactId>
             <version>${powsybl-core.version}</version>
         </dependency>
 
