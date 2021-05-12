@@ -22,16 +22,4 @@ public class DiffStudyApplication {
     public static void main(String[] args) {
         SpringApplication.run(DiffStudyApplication.class, args);
     }
-
-    @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/" + DiffStudyApi.API_VERSION + "/**")
-                        .allowedMethods("GET", "HEAD", "POST", "DELETE", "PUT")
-                        .allowedOrigins("http://localhost:4200");
-            }
-        };
-    }
 }
