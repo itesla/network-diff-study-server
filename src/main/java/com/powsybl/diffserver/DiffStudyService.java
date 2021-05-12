@@ -30,6 +30,7 @@ import com.powsybl.iidm.network.*;
 import com.powsybl.network.store.client.NetworkStoreService;
 import com.powsybl.network.store.client.PreloadingStrategy;
 import com.powsybl.network.store.model.TopLevelDocument;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.gridsuite.geodata.extensions.Coordinate;
 import org.gridsuite.geodata.server.dto.LineGeoData;
 import org.gridsuite.geodata.server.dto.SubstationGeoData;
@@ -55,6 +56,8 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.time.ZonedDateTime;
 import java.util.*;
@@ -84,8 +87,14 @@ public class DiffStudyService {
         final String pDelta2;
         final String qDelta2;
         final String iDelta2;
+        final String pDelta1Perc;
+        final String qDelta1Perc;
+        final String iDelta1Perc;
+        final String pDelta2Perc;
+        final String qDelta2Perc;
+        final String iDelta2Perc;
 
-        public LineDiffData(String lineId, String pDelta1, String qDelta1, String iDelta1, String pDelta2, String qDelta2, String iDelta2) {
+        public LineDiffData(String lineId, String pDelta1, String qDelta1, String iDelta1, String pDelta2, String qDelta2, String iDelta2, String pDelta1Perc, String qDelta1Perc, String iDelta1Perc, String pDelta2Perc, String qDelta2Perc, String iDelta2Perc) {
             this.lineId = lineId;
             this.pDelta1 = pDelta1;
             this.qDelta1 = qDelta1;
@@ -93,6 +102,12 @@ public class DiffStudyService {
             this.pDelta2 = pDelta2;
             this.qDelta2 = qDelta2;
             this.iDelta2 = iDelta2;
+            this.pDelta1Perc = pDelta1Perc;
+            this.qDelta1Perc = qDelta1Perc;
+            this.iDelta1Perc = iDelta1Perc;
+            this.pDelta2Perc = pDelta2Perc;
+            this.qDelta2Perc = qDelta2Perc;
+            this.iDelta2Perc = iDelta2Perc;
         }
 
         public String getLineId() {
@@ -115,12 +130,36 @@ public class DiffStudyService {
             return pDelta2;
         }
 
-        public String getqDelta2() {
-            return qDelta2;
+        public String getpDelta1Perc() {
+            return pDelta1Perc;
+        }
+
+        public String getqDelta1Perc() {
+            return qDelta1Perc;
         }
 
         public String getiDelta2() {
             return iDelta2;
+        }
+
+        public String getiDelta1Perc() {
+            return iDelta1Perc;
+        }
+
+        public String getpDelta2Perc() {
+            return pDelta2Perc;
+        }
+
+        public String getqDelta2Perc() {
+            return qDelta2Perc;
+        }
+
+        public String getiDelta2Perc() {
+            return iDelta2Perc;
+        }
+
+        public String getqDelta2() {
+            return qDelta2;
         }
 
         @Override
@@ -135,11 +174,15 @@ public class DiffStudyService {
         final String vlId;
         final String minVDelta;
         final String maxVDelta;
+        final String minVDeltaPerc;
+        final String maxVDeltaPerc;
 
-        public VlDiffData(String vlId, String minVDelta, String maxVDelta) {
+        public VlDiffData(String vlId, String minVDelta, String maxVDelta, String minVDeltaPerc, String maxVDeltaPerc) {
             this.vlId = vlId;
             this.minVDelta = minVDelta;
             this.maxVDelta = maxVDelta;
+            this.minVDeltaPerc = minVDeltaPerc;
+            this.maxVDeltaPerc = maxVDeltaPerc;
         }
 
         public String getVlId() {
@@ -160,8 +203,19 @@ public class DiffStudyService {
                     "vlId='" + vlId + '\'' +
                     ", minVDelta='" + minVDelta + '\'' +
                     ", maxVDelta='" + maxVDelta + '\'' +
+                    ", minVDeltaPerc='" + minVDeltaPerc + '\'' +
+                    ", maxVDeltaPerc='" + maxVDeltaPerc + '\'' +
                     '}';
         }
+
+        public String getMinVDeltaPerc() {
+            return minVDeltaPerc;
+        }
+
+        public String getMaxVDeltaPerc() {
+            return maxVDeltaPerc;
+        }
+
     }
 
     class DiffData {
@@ -192,7 +246,14 @@ public class DiffStudyService {
                                     branchMap.get("branch.terminal1.i-delta").toString(),
                                     branchMap.get("branch.terminal2.p-delta").toString(),
                                     branchMap.get("branch.terminal2.q-delta").toString(),
-                                    branchMap.get("branch.terminal2.i-delta").toString());
+                                    branchMap.get("branch.terminal2.i-delta").toString(),
+                                    formatPerc(branchMap.get("branch.terminal1.p-delta-percent").toString()),
+                                    formatPerc(branchMap.get("branch.terminal1.q-delta-percent").toString()),
+                                    formatPerc(branchMap.get("branch.terminal1.i-delta-percent").toString()),
+                                    formatPerc(branchMap.get("branch.terminal2.p-delta-percent").toString()),
+                                    formatPerc(branchMap.get("branch.terminal2.q-delta-percent").toString()),
+                                    formatPerc(branchMap.get("branch.terminal2.i-delta-percent").toString())
+                                    );
                         })
                         .collect(Collectors.toList());
 
@@ -201,7 +262,9 @@ public class DiffStudyService {
                             Map<String, Object> vlMap = (Map) t;
                             return new VlDiffData(vlMap.get("vl.vlId1").toString(),
                                     vlMap.get("vl.minV-delta").toString(),
-                                    vlMap.get("vl.maxV-delta").toString());
+                                    vlMap.get("vl.maxV-delta").toString(),
+                                    formatPerc(vlMap.get("vl.minV-delta-percent").toString()),
+                                    formatPerc(vlMap.get("vl.maxV-delta-percent").toString()));
                         }).collect(Collectors.toMap(VlDiffData::getVlId, vlDiffData -> vlDiffData));
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -314,6 +377,10 @@ public class DiffStudyService {
                     LOGGER.error(t.getMessage(), t);
                     return new RuntimeException(t);
                 });
+    }
+
+    public static String formatPerc(String aNum) {
+        return (NumberUtils.isCreatable(aNum)) ? new BigDecimal(aNum).setScale(2, RoundingMode.HALF_UP).toString() + " %" : aNum;
     }
 
     private Mono<String> getCaseFormat(UUID caseUuid) {
@@ -719,6 +786,8 @@ public class DiffStudyService {
         //NaN is not part of the JSON standard and frontend would fail when parsing it
         //it should be handled at the source, though
         jsonDiff = jsonDiff.replace(": NaN,", ": \"Nan\",");
+        jsonDiff = jsonDiff.replace(": Infinity,", ": \"Infinity\",");
+        jsonDiff = jsonDiff.replace(": -Infinity,", ": \"-Infinity\",");
         return jsonDiff;
     }
 
@@ -799,6 +868,7 @@ public class DiffStudyService {
             Map<String, DiffData> subsDiffs = new HashMap<>();
             for (String subId : subsIds) {
                 String jsonDiff = diffSubstation(network1, network2, subId, threshold);
+                LOGGER.info("$$$ {} - {}", subId, jsonDiff);
                 DiffData diffData = new DiffData(jsonDiff);
                 subsDiffs.put(subId, diffData);
             }
@@ -860,6 +930,8 @@ public class DiffStudyService {
                         vlJson.addProperty("isDifferent", "true");
                         vlJson.addProperty("minVDelta", vlDiffData.getMinVDelta());
                         vlJson.addProperty("maxVDelta", vlDiffData.getMaxVDelta());
+                        vlJson.addProperty("minVDeltaPerc", vlDiffData.getMinVDeltaPerc());
+                        vlJson.addProperty("maxVDeltaPerc", vlDiffData.getMaxVDeltaPerc());
                         isSubDifferent.set(true);
                     } else {
                         vlJson.addProperty("isDifferent", "false");
@@ -913,6 +985,12 @@ public class DiffStudyService {
                 featureLine.addStringProperty("t2_dp", lineDiffData.getpDelta2());
                 featureLine.addStringProperty("t2_dq", lineDiffData.getqDelta2());
                 featureLine.addStringProperty("t2_di", lineDiffData.getiDelta2());
+                featureLine.addStringProperty("t1_dp_perc", lineDiffData.getpDelta1Perc());
+                featureLine.addStringProperty("t1_dq_perc", lineDiffData.getqDelta1Perc());
+                featureLine.addStringProperty("t1_di_perc", lineDiffData.getiDelta1Perc());
+                featureLine.addStringProperty("t2_dp_perc", lineDiffData.getpDelta2Perc());
+                featureLine.addStringProperty("t2_dq_perc", lineDiffData.getqDelta2Perc());
+                featureLine.addStringProperty("t2_di_perc", lineDiffData.getiDelta2Perc());
             } else {
                 style.addProperty("color", "#0000FF");
                 featureLine.addStringProperty("isDifferent", "false");
