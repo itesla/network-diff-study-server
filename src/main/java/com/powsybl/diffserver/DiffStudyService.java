@@ -240,13 +240,14 @@ public class DiffStudyService {
                 linesDiffData = (List<LineDiffData>) ((List) jsonMap.get("diff.Branches")).stream()
                         .map(t -> {
                             Map<String, Object> branchMap = (Map) t;
-                            return new LineDiffData(branchMap.get("branch.branchId1").toString(),
-                                    branchMap.get("branch.terminal1.p-delta").toString(),
-                                    branchMap.get("branch.terminal1.q-delta").toString(),
-                                    branchMap.get("branch.terminal1.i-delta").toString(),
-                                    branchMap.get("branch.terminal2.p-delta").toString(),
-                                    branchMap.get("branch.terminal2.q-delta").toString(),
-                                    branchMap.get("branch.terminal2.i-delta").toString(),
+                            return new LineDiffData(
+                                    formatNum(branchMap.get("branch.branchId1").toString()),
+                                    formatNum(branchMap.get("branch.terminal1.p-delta").toString()),
+                                    formatNum(branchMap.get("branch.terminal1.q-delta").toString()),
+                                    formatNum(branchMap.get("branch.terminal1.i-delta").toString()),
+                                    formatNum(branchMap.get("branch.terminal2.p-delta").toString()),
+                                    formatNum(branchMap.get("branch.terminal2.q-delta").toString()),
+                                    formatNum(branchMap.get("branch.terminal2.i-delta").toString()),
                                     formatPerc(branchMap.get("branch.terminal1.p-delta-percent").toString()),
                                     formatPerc(branchMap.get("branch.terminal1.q-delta-percent").toString()),
                                     formatPerc(branchMap.get("branch.terminal1.i-delta-percent").toString()),
@@ -260,9 +261,10 @@ public class DiffStudyService {
                 vlDiffData = (Map<String, VlDiffData>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
                         .map(t -> {
                             Map<String, Object> vlMap = (Map) t;
-                            return new VlDiffData(vlMap.get("vl.vlId1").toString(),
-                                    vlMap.get("vl.minV-delta").toString(),
-                                    vlMap.get("vl.maxV-delta").toString(),
+                            return new VlDiffData(
+                                    formatNum(vlMap.get("vl.vlId1").toString()),
+                                    formatNum(vlMap.get("vl.minV-delta").toString()),
+                                    formatNum(vlMap.get("vl.maxV-delta").toString()),
                                     formatPerc(vlMap.get("vl.minV-delta-percent").toString()),
                                     formatPerc(vlMap.get("vl.maxV-delta-percent").toString()));
                         }).collect(Collectors.toMap(VlDiffData::getVlId, vlDiffData -> vlDiffData));
@@ -379,8 +381,16 @@ public class DiffStudyService {
                 });
     }
 
+    public static String formatNum(String aNum) {
+        return formatNum(aNum, 3, "");
+    }
+
     public static String formatPerc(String aNum) {
-        return (NumberUtils.isCreatable(aNum)) ? new BigDecimal(aNum).setScale(2, RoundingMode.HALF_UP).toString() + " %" : aNum;
+        return formatNum(aNum, 2, "%");
+    }
+
+    public static String formatNum(String aNum, int prec, String suffix) {
+        return (NumberUtils.isCreatable(aNum)) ? new BigDecimal(aNum).setScale(prec, RoundingMode.HALF_UP).toString() + suffix : aNum;
     }
 
     private Mono<String> getCaseFormat(UUID caseUuid) {
