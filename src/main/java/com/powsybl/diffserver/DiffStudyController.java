@@ -162,8 +162,8 @@ public class DiffStudyController {
     @GetMapping(value = "/diff-studies/getgeojsons")
     @ApiOperation(value = "Get geojsons", produces = "application/json")
     @ApiResponses(value = {@ApiResponse(code = 200, message = "substations geojson")})
-    public ResponseEntity<Mono<String>> getGeoJsons(@RequestParam("diffStudyName") String diffStudyName, @RequestParam("threshold") Double threshold, @RequestParam("layersIds") List<String> layersIds) {
-        String multipleGeoJsons = diffStudyService.getGeoJsonLayers(diffStudyName, threshold, layersIds);
+    public ResponseEntity<Mono<String>> getGeoJsons(@RequestParam("diffStudyName") String diffStudyName, @RequestParam("threshold") Double threshold, @RequestParam("voltageThreshold") Double voltageThreshold, @RequestParam("layersIds") List<String> layersIds) {
+        String multipleGeoJsons = diffStudyService.getGeoJsonLayers(diffStudyName, threshold, voltageThreshold, layersIds);
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(Mono.just(multipleGeoJsons));
     }
 

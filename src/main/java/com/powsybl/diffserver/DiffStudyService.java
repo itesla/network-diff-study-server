@@ -776,10 +776,10 @@ public class DiffStudyService {
     }
 
     private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches) {
-        return diffVoltageLevels(network1, network2, voltageLevels, branches, DiffConfig.EPSILON_DEFAULT);
+        return diffVoltageLevels(network1, network2, voltageLevels, branches, DiffConfig.EPSILON_DEFAULT, DiffConfig.EPSILON_DEFAULT);
     }
 
-    private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches, double threshold) {
+    private String diffVoltageLevels(Network network1, Network network2, List<String> voltageLevels, List<String> branches, double threshold, double voltageThreshold) {
         DiffEquipment diffEquipment = new DiffEquipment();
         diffEquipment.setVoltageLevels(voltageLevels);
         List<DiffEquipmentType> equipmentTypes = new ArrayList<DiffEquipmentType>();
@@ -789,7 +789,7 @@ public class DiffStudyService {
             diffEquipment.setBranches(branches);
         }
         diffEquipment.setEquipmentTypes(equipmentTypes);
-        DiffConfig config = new DiffConfig(threshold, DiffConfig.FILTER_DIFF_DEFAULT);
+        DiffConfig config = new DiffConfig(threshold, voltageThreshold, DiffConfig.FILTER_DIFF_DEFAULT);
         NetworkDiff ndiff = new NetworkDiff(config);
         NetworkDiffResults diffVl = ndiff.diff(network1, network2, diffEquipment);
         String jsonDiff = NetworkDiff.writeJson(diffVl);
@@ -802,10 +802,10 @@ public class DiffStudyService {
     }
 
     private String diffSubstation(Network network1, Network network2, String substationId) {
-        return diffSubstation(network1, network2, substationId, DiffConfig.EPSILON_DEFAULT);
+        return diffSubstation(network1, network2, substationId, DiffConfig.EPSILON_DEFAULT, DiffConfig.EPSILON_DEFAULT);
     }
 
-    private String diffSubstation(Network network1, Network network2, String substationId, double threshold) {
+    private String diffSubstation(Network network1, Network network2, String substationId, double threshold, double voltageThreshold) {
         Substation substation1 = network1.getSubstation(substationId);
         List<String> voltageLevels = substation1.getVoltageLevelStream().map(VoltageLevel::getId)
                 .collect(Collectors.toList());
@@ -814,7 +814,7 @@ public class DiffStudyService {
         List<String> twts = substation1.getTwoWindingsTransformerStream().map(TwoWindingsTransformer::getId)
                 .collect(Collectors.toList());
         branches.addAll(twts);
-        String jsonDiff = diffVoltageLevels(network1, network2, voltageLevels, branches, threshold);
+        String jsonDiff = diffVoltageLevels(network1, network2, voltageLevels, branches, threshold, voltageThreshold);
         return jsonDiff;
     }
 
@@ -857,7 +857,7 @@ public class DiffStudyService {
         return layerObj;
     }
 
-    public String getGeoJsonLayers(String diffStudyName, double threshold, List<String> layersIds) {
+    public String getGeoJsonLayers(String diffStudyName, double threshold, double voltageThreshold, List<String> layersIds) {
         Objects.requireNonNull(diffStudyName);
         Objects.requireNonNull(layersIds);
         JsonObject retJson = new JsonObject();
@@ -866,6 +866,8 @@ public class DiffStudyService {
         if (layersIds.size() == 0) {
             throw new RuntimeException("at least one layer type id is required");
         }
+
+        LOGGER.info("study name: {}, threshold: {}, voltageThreshold: {}, layersIds: {}", diffStudyName, threshold, voltageThreshold, layersIds);
         DiffStudy diffStudy = getDiffStudy(diffStudyName)
                 .switchIfEmpty(Mono.error(new DiffStudyException(DIFF_STUDY_DOESNT_EXISTS)))
                 .block();
@@ -877,7 +879,7 @@ public class DiffStudyService {
             // map subId, diffData
             Map<String, DiffData> subsDiffs = new HashMap<>();
             for (String subId : subsIds) {
-                String jsonDiff = diffSubstation(network1, network2, subId, threshold);
+                String jsonDiff = diffSubstation(network1, network2, subId, threshold, voltageThreshold);
                 LOGGER.info("$$$ {} - {}", subId, jsonDiff);
                 DiffData diffData = new DiffData(jsonDiff);
                 subsDiffs.put(subId, diffData);
