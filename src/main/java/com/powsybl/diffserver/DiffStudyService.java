@@ -684,15 +684,13 @@ public class DiffStudyService {
     private Map<String, LineGeoData> getLinesCoordinatesConnectingSubstationsAsMap(Network network, List<String> zoneLines, Map<String, SubstationGeoData> subsCoordsMap) {
         Map<String, LineGeoData> map = new HashMap<>();
         for (String zoneLineId : zoneLines) {
-            String subId1 = network.getLine(zoneLineId).getTerminal1().getVoltageLevel().getSubstation().getId();
-            Optional<Country> subCountry1 = network.getLine(zoneLineId).getTerminal1().getVoltageLevel().getSubstation().getCountry();
-            String subId2 = network.getLine(zoneLineId).getTerminal2().getVoltageLevel().getSubstation().getId();
-            Optional<Country> subCountry2 = network.getLine(zoneLineId).getTerminal2().getVoltageLevel().getSubstation().getCountry();
-            SubstationGeoData subData1 = subsCoordsMap.get(subId1);
-            SubstationGeoData subData2 = subsCoordsMap.get(subId2);
+            Substation sub1 = network.getLine(zoneLineId).getTerminal1().getVoltageLevel().getSubstation();
+            Substation sub2 = network.getLine(zoneLineId).getTerminal2().getVoltageLevel().getSubstation();
+            SubstationGeoData subData1 = subsCoordsMap.get(sub1.getId());
+            SubstationGeoData subData2 = subsCoordsMap.get(sub2.getId());
             if (subData1 != null && subData2 != null && !subData1.getId().equals(subData2.getId())) {
-                map.put(zoneLineId, new LineGeoData(zoneLineId, subCountry1.orElse(Country.FR), subCountry2.orElse(Country.FR),
-                        List.of(subData1.getCoordinate(), subData2.getCoordinate())));
+                map.put(zoneLineId, new LineGeoData(zoneLineId, sub1.getCountry().orElse(Country.FR), sub1.getCountry().orElse(Country.FR),
+                    sub1.getId(), sub2.getId(), List.of(subData1.getCoordinate(), subData2.getCoordinate())));
             }
         }
         return map;
