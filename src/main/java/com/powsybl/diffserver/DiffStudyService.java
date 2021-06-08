@@ -386,7 +386,7 @@ public class DiffStudyService {
     }
 
     public static String formatPerc(String aNum) {
-        return formatNum(aNum, 2, "%");
+        return formatNum(aNum, 2, "");
     }
 
     public static String formatNum(String aNum, int prec, String suffix) {
@@ -855,7 +855,16 @@ public class DiffStudyService {
         return layerObj;
     }
 
-    public String getGeoJsonLayers(String diffStudyName, double threshold, double voltageThreshold, List<String> layersIds) {
+    private LevelsData parseLevelsData(String levels) {
+        if (levels != null) {
+            LevelsData levelsData = LevelsData.parseData(levels, true);
+            return levelsData;
+        } else {
+            return null;
+        }
+    }
+
+    public String getGeoJsonLayers(String diffStudyName, double threshold, double voltageThreshold, List<String> layersIds, String levels) {
         Objects.requireNonNull(diffStudyName);
         Objects.requireNonNull(layersIds);
         JsonObject retJson = new JsonObject();
@@ -864,6 +873,9 @@ public class DiffStudyService {
         if (layersIds.size() == 0) {
             throw new RuntimeException("at least one layer type id is required");
         }
+
+        LevelsData levelsData = parseLevelsData(levels);
+        LOGGER.info("levels data: {}", levelsData);
 
         LOGGER.info("study name: {}, threshold: {}, voltageThreshold: {}, layersIds: {}", diffStudyName, threshold, voltageThreshold, layersIds);
         DiffStudy diffStudy = getDiffStudy(diffStudyName)
@@ -896,7 +908,7 @@ public class DiffStudyService {
             if (layersIds.contains("LINES")) {
                 // lines geoJson (true coordinates) note: retrieve linesGeoData for all the network lines is quite expensive
                 Map<String, LineGeoData> networkLinesCoordsData = getLinesCoordinatesAsMap(diffStudy);
-                String linesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData, subsDiffs, zoneLines);
+                String linesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData, subsDiffs, zoneLines, levelsData);
                 jsonArray.add(wrapJsonWithMeta("LINES", linesGeoJson));
             }
 
@@ -904,7 +916,7 @@ public class DiffStudyService {
                 //simple lines (connecting substations)
                 Map<String, LineGeoData> networkLinesCoordsData2 = getLinesCoordinatesConnectingSubstationsAsMap(network1, zoneLines,
                         getSubsCoordinatesAsMap(diffStudy));
-                String simpleLinesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData2, subsDiffs, zoneLines);
+                String simpleLinesGeoJson = extractJsonLines(subsIds, networkLinesCoordsData2, subsDiffs, zoneLines, levelsData);
                 jsonArray.add(wrapJsonWithMeta("LINES-SIMPLE", simpleLinesGeoJson));
             }
         } else {
@@ -963,7 +975,7 @@ public class DiffStudyService {
         return subsgeoJson;
     }
 
-    private String extractJsonLines(List<String> subsIds, Map<String, LineGeoData> networkLinesCoordsData, Map<String, DiffData> subsDiffs, List<String> zoneLines) {
+    private String extractJsonLines(List<String> subsIds, Map<String, LineGeoData> networkLinesCoordsData, Map<String, DiffData> subsDiffs, List<String> zoneLines, LevelsData levelsData) {
         Map<String, LineDiffData> zoneBranchesMap = new HashMap<>();
         for (String subId : subsIds) {
             DiffData diffData = subsDiffs.get(subId);
@@ -985,9 +997,10 @@ public class DiffStudyService {
             featureLine.addStringProperty("id", lineData.getId());
             JsonObject style = new JsonObject();
             style.addProperty("weight", 4);
+            String lineColor = "black";
             if (zoneBranchesMap.containsKey(lineData.getId())) {
                 LineDiffData lineDiffData = zoneBranchesMap.get(lineData.getId());
-                style.addProperty("color", "#FF0000");
+                lineColor = assignColorToLine(lineDiffData, levelsData);
                 featureLine.addStringProperty("isDifferent", "true");
                 featureLine.addStringProperty("t1_dp", lineDiffData.getpDelta1());
                 featureLine.addStringProperty("t1_dq", lineDiffData.getqDelta1());
@@ -1002,16 +1015,32 @@ public class DiffStudyService {
                 featureLine.addStringProperty("t2_dq_perc", lineDiffData.getqDelta2Perc());
                 featureLine.addStringProperty("t2_di_perc", lineDiffData.getiDelta2Perc());
             } else {
-                style.addProperty("color", "#0000FF");
                 featureLine.addStringProperty("isDifferent", "false");
             }
+            style.addProperty("color", lineColor);
             style.addProperty("opacity", 1);
-            style.addProperty("fillColor", "#FF0000");
             style.addProperty("fillOpacity", 1);
             featureLine.addProperty("style", style);
             features.add(featureLine);
         }
         FeatureCollection featureCollection = FeatureCollection.fromFeatures(features);
         return featureCollection.toJson();
+    }
+
+    private String assignColorToLine(LineDiffData lineDiffData, LevelsData levelsData) {
+        if (levelsData == null) {
+            return "black";
+        }
+        List<String> diffPercList = List.of(lineDiffData.iDelta1Perc, lineDiffData.iDelta2Perc, lineDiffData.pDelta1Perc,
+                lineDiffData.pDelta2Perc, lineDiffData.qDelta1Perc, lineDiffData.qDelta2Perc);
+        double maxPerc = diffPercList.stream().filter(NumberUtils::isCreatable).mapToDouble(Double::valueOf).max().getAsDouble();
+        List<LevelData> orderedLevels = levelsData.getLevels().stream().sorted(Comparator.comparing(LevelData::getI).reversed()).collect(Collectors.toList());
+        for (int i = 0; i < orderedLevels.size(); i++) {
+            LevelData ld = orderedLevels.get(i);
+            if (maxPerc >= ld.getI()) {
+                return ld.getC();
+            }
+        }
+        return "black";
     }
 }
