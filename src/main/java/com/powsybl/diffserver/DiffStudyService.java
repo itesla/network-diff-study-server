@@ -78,6 +78,7 @@ import static com.powsybl.diffserver.DiffStudyConstants.*;
 public class DiffStudyService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiffStudyService.class);
+    public static final String SAME_LEVEL_COLOR = "black";
 
     class LineDiffData {
         final String lineId;
@@ -288,6 +289,11 @@ public class DiffStudyService {
         public Map<String, VlDiffData> getVlDiffData() {
             return vlDiffData;
         }
+    }
+
+    public enum LevelDataType {
+        POWER_CURRENT,
+        VOLTAGE,
     }
 
     private WebClient webClient;
@@ -900,7 +906,7 @@ public class DiffStudyService {
                 // map subId, substationGeoData
                 Map<String, SubstationGeoData> allSubsGeodata = getSubsCoordinatesAsMap(diffStudy);
                 Map<String, SubstationGeoData> zoneSubsGeodata = subsIds.stream().filter(allSubsGeodata::containsKey).map(allSubsGeodata::get).collect(Collectors.toMap(SubstationGeoData::getId, t -> t));
-                String subsgeoJson = extractJsonSubs(subsIds, subsDiffs, zoneSubsGeodata, network1);
+                String subsgeoJson = extractJsonSubs(subsIds, subsDiffs, zoneSubsGeodata, network1, levelsData);
                 jsonArray.add(wrapJsonWithMeta("SUBS", subsgeoJson));
             }
 
@@ -930,7 +936,7 @@ public class DiffStudyService {
         return retJson.toString();
     }
 
-    private String extractJsonSubs(List<String> subsIds, Map<String, DiffData> subsDiffs, Map<String, SubstationGeoData> zoneSubsGeodata, Network network1) {
+    private String extractJsonSubs(List<String> subsIds, Map<String, DiffData> subsDiffs, Map<String, SubstationGeoData> zoneSubsGeodata, Network network1, LevelsData levelsData) {
         List<Feature> features = new ArrayList<>();
         for (String subId : subsIds) {
             DiffData diffData = subsDiffs.get(subId);
@@ -954,16 +960,20 @@ public class DiffStudyService {
                         vlJson.addProperty("maxVDelta", vlDiffData.getMaxVDelta());
                         vlJson.addProperty("minVDeltaPerc", vlDiffData.getMinVDeltaPerc());
                         vlJson.addProperty("maxVDeltaPerc", vlDiffData.getMaxVDeltaPerc());
+                        vlJson.addProperty("color", assignColorToVl(vlDiffData, levelsData));
                         isSubDifferent.set(true);
                     } else {
                         vlJson.addProperty("isDifferent", "false");
+                        vlJson.addProperty("color", SAME_LEVEL_COLOR);
                     }
                     vlJsonMap.put(vlId, vlJson);
                 });
 
+                String subColor = assignColorToSub(subVlevelsIds.stream().filter(vlDiffDataMap::containsKey).map(vlDiffDataMap::get).collect(Collectors.toList()), levelsData);
                 Feature featureSub = Feature.fromGeometry(Point.fromLngLat(subCoords.getLon(), subCoords.getLat()));
                 featureSub.addStringProperty("id", subData.getId());
                 featureSub.addBooleanProperty("isDifferent", isSubDifferent.get());
+                featureSub.addStringProperty("subColor", subColor);
                 featureSub.addProperty("vlevels", vlJsonMap.values().stream().collect(JsonArray::new, JsonArray::add, (ja1, ja2) -> ja2.add(ja2)));
                 features.add(featureSub);
             } else {
@@ -997,7 +1007,7 @@ public class DiffStudyService {
             featureLine.addStringProperty("id", lineData.getId());
             JsonObject style = new JsonObject();
             style.addProperty("weight", 4);
-            String lineColor = "black";
+            String lineColor = SAME_LEVEL_COLOR;
             if (zoneBranchesMap.containsKey(lineData.getId())) {
                 LineDiffData lineDiffData = zoneBranchesMap.get(lineData.getId());
                 lineColor = assignColorToLine(lineDiffData, levelsData);
@@ -1027,20 +1037,42 @@ public class DiffStudyService {
         return featureCollection.toJson();
     }
 
-    private String assignColorToLine(LineDiffData lineDiffData, LevelsData levelsData) {
-        if (levelsData == null) {
-            return "black";
+    private String assignColorFromDoubleList(List<Double> values, LevelsData levelsData, LevelDataType lDataType) {
+        if ((values == null) || (levelsData == null)) {
+            return SAME_LEVEL_COLOR;
         }
-        List<String> diffPercList = List.of(lineDiffData.iDelta1Perc, lineDiffData.iDelta2Perc, lineDiffData.pDelta1Perc,
-                lineDiffData.pDelta2Perc, lineDiffData.qDelta1Perc, lineDiffData.qDelta2Perc);
-        double maxPerc = diffPercList.stream().filter(NumberUtils::isCreatable).mapToDouble(Double::valueOf).max().getAsDouble();
-        List<LevelData> orderedLevels = levelsData.getLevels().stream().sorted(Comparator.comparing(LevelData::getI).reversed()).collect(Collectors.toList());
+        double maxValue = values.stream().max(Comparator.naturalOrder()).orElse(0.0);
+        List<LevelData> orderedLevels = levelsData.getLevels().stream().sorted(Comparator
+                .comparing((lDataType == LevelDataType.POWER_CURRENT) ? LevelData::getI : LevelData::getV).reversed()).collect(Collectors.toList());
         for (int i = 0; i < orderedLevels.size(); i++) {
             LevelData ld = orderedLevels.get(i);
-            if (maxPerc >= ld.getI()) {
+            double compValue = (lDataType == LevelDataType.POWER_CURRENT) ? ld.getI() : ld.getV();
+            if (maxValue >= compValue) {
                 return ld.getC();
             }
         }
-        return "black";
+        return SAME_LEVEL_COLOR;
+    }
+
+    private String assignColorFromStringList(List<String> values, LevelsData levelsData, LevelDataType lDataType) {
+        List<Double> diffPercDoubleList = values.stream().filter(NumberUtils::isCreatable).map(Double::valueOf).collect(Collectors.toList());
+        return assignColorFromDoubleList(diffPercDoubleList, levelsData, lDataType);
+    }
+
+    private String assignColorToLine(LineDiffData lineDiffData, LevelsData levelsData) {
+        List<String> diffPercList = List.of(lineDiffData.iDelta1Perc, lineDiffData.iDelta2Perc, lineDiffData.pDelta1Perc,
+                lineDiffData.pDelta2Perc, lineDiffData.qDelta1Perc, lineDiffData.qDelta2Perc);
+        return assignColorFromStringList(diffPercList, levelsData, LevelDataType.POWER_CURRENT);
+    }
+
+    private String assignColorToVl(VlDiffData vlDiffData, LevelsData levelsData) {
+        List<String> diffPercList = List.of(vlDiffData.getMinVDeltaPerc(), vlDiffData.getMaxVDeltaPerc());
+        return assignColorFromStringList(diffPercList, levelsData, LevelDataType.VOLTAGE);
+    }
+
+    private String assignColorToSub(List<VlDiffData> vlList, LevelsData levelsData) {
+        List<String> vlPercentages = vlList.stream().map(vlData -> List.of(vlData.getMinVDeltaPerc(), vlData.getMaxVDeltaPerc()))
+                .flatMap(List::stream).collect(Collectors.toList());
+        return assignColorFromStringList(vlPercentages, levelsData, LevelDataType.VOLTAGE);
     }
 }
