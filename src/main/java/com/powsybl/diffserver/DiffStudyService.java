@@ -6,8 +6,6 @@
  */
 package com.powsybl.diffserver;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
@@ -54,7 +52,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -79,217 +76,6 @@ public class DiffStudyService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiffStudyService.class);
     public static final String SAME_LEVEL_COLOR = "black";
-
-    class LineDiffData {
-        final String lineId;
-        final String pDelta1;
-        final String qDelta1;
-        final String iDelta1;
-        final String pDelta2;
-        final String qDelta2;
-        final String iDelta2;
-        final String pDelta1Perc;
-        final String qDelta1Perc;
-        final String iDelta1Perc;
-        final String pDelta2Perc;
-        final String qDelta2Perc;
-        final String iDelta2Perc;
-
-        public LineDiffData(String lineId, String pDelta1, String qDelta1, String iDelta1, String pDelta2, String qDelta2, String iDelta2, String pDelta1Perc, String qDelta1Perc, String iDelta1Perc, String pDelta2Perc, String qDelta2Perc, String iDelta2Perc) {
-            this.lineId = lineId;
-            this.pDelta1 = pDelta1;
-            this.qDelta1 = qDelta1;
-            this.iDelta1 = iDelta1;
-            this.pDelta2 = pDelta2;
-            this.qDelta2 = qDelta2;
-            this.iDelta2 = iDelta2;
-            this.pDelta1Perc = pDelta1Perc;
-            this.qDelta1Perc = qDelta1Perc;
-            this.iDelta1Perc = iDelta1Perc;
-            this.pDelta2Perc = pDelta2Perc;
-            this.qDelta2Perc = qDelta2Perc;
-            this.iDelta2Perc = iDelta2Perc;
-        }
-
-        public String getLineId() {
-            return lineId;
-        }
-
-        public String getpDelta1() {
-            return pDelta1;
-        }
-
-        public String getqDelta1() {
-            return qDelta1;
-        }
-
-        public String getiDelta1() {
-            return iDelta1;
-        }
-
-        public String getpDelta2() {
-            return pDelta2;
-        }
-
-        public String getpDelta1Perc() {
-            return pDelta1Perc;
-        }
-
-        public String getqDelta1Perc() {
-            return qDelta1Perc;
-        }
-
-        public String getiDelta2() {
-            return iDelta2;
-        }
-
-        public String getiDelta1Perc() {
-            return iDelta1Perc;
-        }
-
-        public String getpDelta2Perc() {
-            return pDelta2Perc;
-        }
-
-        public String getqDelta2Perc() {
-            return qDelta2Perc;
-        }
-
-        public String getiDelta2Perc() {
-            return iDelta2Perc;
-        }
-
-        public String getqDelta2() {
-            return qDelta2;
-        }
-
-        @Override
-        public String toString() {
-            return "LineDiffData{" +
-                    "lineId='" + lineId + '\'' +
-                    '}';
-        }
-    }
-
-    class VlDiffData {
-        final String vlId;
-        final String minVDelta;
-        final String maxVDelta;
-        final String minVDeltaPerc;
-        final String maxVDeltaPerc;
-
-        public VlDiffData(String vlId, String minVDelta, String maxVDelta, String minVDeltaPerc, String maxVDeltaPerc) {
-            this.vlId = vlId;
-            this.minVDelta = minVDelta;
-            this.maxVDelta = maxVDelta;
-            this.minVDeltaPerc = minVDeltaPerc;
-            this.maxVDeltaPerc = maxVDeltaPerc;
-        }
-
-        public String getVlId() {
-            return vlId;
-        }
-
-        public String getMinVDelta() {
-            return minVDelta;
-        }
-
-        public String getMaxVDelta() {
-            return maxVDelta;
-        }
-
-        @Override
-        public String toString() {
-            return "VlDiffData{" +
-                    "vlId='" + vlId + '\'' +
-                    ", minVDelta='" + minVDelta + '\'' +
-                    ", maxVDelta='" + maxVDelta + '\'' +
-                    ", minVDeltaPerc='" + minVDeltaPerc + '\'' +
-                    ", maxVDeltaPerc='" + maxVDeltaPerc + '\'' +
-                    '}';
-        }
-
-        public String getMinVDeltaPerc() {
-            return minVDeltaPerc;
-        }
-
-        public String getMaxVDeltaPerc() {
-            return maxVDeltaPerc;
-        }
-
-    }
-
-    class DiffData {
-        final List<String> switchesDiff;
-        final List<String> branchesDiff;
-        final List<LineDiffData> linesDiffData;
-        final Map<String, VlDiffData> vlDiffData;
-
-        DiffData(String jsonDiff) {
-            try {
-                ObjectMapper objectMapper = new ObjectMapper();
-                Map<String, Object> jsonMap = objectMapper.readValue(jsonDiff, new TypeReference<Map<String, Object>>() {
-                });
-                switchesDiff = (List<String>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
-                        .map(t -> ((Map) t).get("vl.switchesStatus-delta"))
-                        .flatMap(t -> ((List<String>) t).stream())
-                        .collect(Collectors.toList());
-                branchesDiff = (List<String>) ((List) jsonMap.get("diff.Branches")).stream()
-                        .map(t -> ((Map) t).get("branch.terminalStatus-delta"))
-                        .flatMap(t -> ((List<String>) t).stream())
-                        .collect(Collectors.toList());
-                linesDiffData = (List<LineDiffData>) ((List) jsonMap.get("diff.Branches")).stream()
-                        .map(t -> {
-                            Map<String, Object> branchMap = (Map) t;
-                            return new LineDiffData(
-                                    formatNum(branchMap.get("branch.branchId1").toString()),
-                                    formatNum(branchMap.get("branch.terminal1.p-delta").toString()),
-                                    formatNum(branchMap.get("branch.terminal1.q-delta").toString()),
-                                    formatNum(branchMap.get("branch.terminal1.i-delta").toString()),
-                                    formatNum(branchMap.get("branch.terminal2.p-delta").toString()),
-                                    formatNum(branchMap.get("branch.terminal2.q-delta").toString()),
-                                    formatNum(branchMap.get("branch.terminal2.i-delta").toString()),
-                                    formatPerc(branchMap.get("branch.terminal1.p-delta-percent").toString()),
-                                    formatPerc(branchMap.get("branch.terminal1.q-delta-percent").toString()),
-                                    formatPerc(branchMap.get("branch.terminal1.i-delta-percent").toString()),
-                                    formatPerc(branchMap.get("branch.terminal2.p-delta-percent").toString()),
-                                    formatPerc(branchMap.get("branch.terminal2.q-delta-percent").toString()),
-                                    formatPerc(branchMap.get("branch.terminal2.i-delta-percent").toString())
-                                    );
-                        })
-                        .collect(Collectors.toList());
-
-                vlDiffData = (Map<String, VlDiffData>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
-                        .map(t -> {
-                            Map<String, Object> vlMap = (Map) t;
-                            return new VlDiffData(
-                                    formatNum(vlMap.get("vl.vlId1").toString()),
-                                    formatNum(vlMap.get("vl.minV-delta").toString()),
-                                    formatNum(vlMap.get("vl.maxV-delta").toString()),
-                                    formatPerc(vlMap.get("vl.minV-delta-percent").toString()),
-                                    formatPerc(vlMap.get("vl.maxV-delta-percent").toString()));
-                        }).collect(Collectors.toMap(VlDiffData::getVlId, vlDiffData -> vlDiffData));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        public List<String> getSwitchesIds() {
-            return switchesDiff;
-        }
-
-        public List<String> getBranchesIds() {
-            return branchesDiff;
-        }
-
-        public List<LineDiffData> getLinesDiffData() {
-            return linesDiffData;
-        }
-
-        public Map<String, VlDiffData> getVlDiffData() {
-            return vlDiffData;
-        }
-    }
 
     public enum LevelDataType {
         POWER_CURRENT,
@@ -896,7 +682,6 @@ public class DiffStudyService {
             Map<String, DiffData> subsDiffs = new HashMap<>();
             for (String subId : subsIds) {
                 String jsonDiff = diffSubstation(network1, network2, subId, threshold, voltageThreshold);
-                LOGGER.info("$$$ {} - {}", subId, jsonDiff);
                 DiffData diffData = new DiffData(jsonDiff);
                 subsDiffs.put(subId, diffData);
             }
