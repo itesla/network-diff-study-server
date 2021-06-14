@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * @author Christian Biasuzzi <christian.biasuzzi@techrain.eu>
@@ -30,19 +29,14 @@ public class LevelsData {
 
     List<LevelData> levels;
 
-    @Override
-    public String toString() {
-        return "LevelsData{" +
-                "levels=" + levels +
-                '}';
-    }
-
     public static LevelsData parseData(String jsonData) {
-        return parseData(jsonData, false);
+        return parseData(jsonData, true);
     }
 
     public static LevelsData parseData(String jsonData, boolean urlDecode) {
-        Objects.requireNonNull(jsonData);
+        if (jsonData == null) {
+            return null;
+        }
         ObjectMapper objectMapper = new ObjectMapper();
         try {
             LevelsData levelsData = objectMapper.readValue(urlDecode ? URLDecoder.decode(jsonData, StandardCharsets.UTF_8.toString()) : jsonData, LevelsData.class);
@@ -52,5 +46,12 @@ public class LevelsData {
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
+    }
+
+    @Override
+    public String toString() {
+        return "LevelsData{" +
+                "levels=" + levels +
+                '}';
     }
 }

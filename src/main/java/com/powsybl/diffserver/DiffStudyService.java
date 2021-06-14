@@ -52,6 +52,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -647,16 +648,16 @@ public class DiffStudyService {
         return layerObj;
     }
 
-    private LevelsData parseLevelsData(String levels) {
-        if (levels != null) {
-            LevelsData levelsData = LevelsData.parseData(levels, true);
-            return levelsData;
-        } else {
-            return null;
+    public String getGeoJsonLayers(String diffStudyName, double threshold, double voltageThreshold, List<String> layersIds, String levels) {
+        try {
+            return extractGeoJsonLayers(diffStudyName, threshold, voltageThreshold, layersIds, levels);
+        } catch (RuntimeException | IOException e) {
+            LOGGER.error(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         }
     }
 
-    public String getGeoJsonLayers(String diffStudyName, double threshold, double voltageThreshold, List<String> layersIds, String levels) {
+    private String extractGeoJsonLayers(String diffStudyName, double threshold, double voltageThreshold, List<String> layersIds, String levels) throws IOException {
         Objects.requireNonNull(diffStudyName);
         Objects.requireNonNull(layersIds);
         JsonObject retJson = new JsonObject();
@@ -666,7 +667,7 @@ public class DiffStudyService {
             throw new RuntimeException("at least one layer type id is required");
         }
 
-        LevelsData levelsData = parseLevelsData(levels);
+        LevelsData levelsData = LevelsData.parseData(levels);
         LOGGER.info("levels data: {}", levelsData);
 
         LOGGER.info("study name: {}, threshold: {}, voltageThreshold: {}, layersIds: {}", diffStudyName, threshold, voltageThreshold, layersIds);
@@ -682,7 +683,7 @@ public class DiffStudyService {
             Map<String, DiffData> subsDiffs = new HashMap<>();
             for (String subId : subsIds) {
                 String jsonDiff = diffSubstation(network1, network2, subId, threshold, voltageThreshold);
-                DiffData diffData = new DiffData(jsonDiff);
+                DiffData diffData = DiffData.parseData(jsonDiff);
                 subsDiffs.put(subId, diffData);
             }
 

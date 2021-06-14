@@ -17,59 +17,17 @@ import java.util.stream.Collectors;
 /**
  * @author Christian Biasuzzi <christian.biasuzzi@techrain.eu>
  */
-class DiffData {
+final class DiffData {
     final List<String> switchesDiff;
     final List<String> branchesDiff;
     final List<LineDiffData> linesDiffData;
     final Map<String, VlDiffData> vlDiffData;
 
-    DiffData(String jsonDiff) {
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            Map<String, Object> jsonMap = objectMapper.readValue(jsonDiff, new TypeReference<Map<String, Object>>() {
-            });
-            switchesDiff = (List<String>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
-                    .map(t -> ((Map) t).get("vl.switchesStatus-delta"))
-                    .flatMap(t -> ((List<String>) t).stream())
-                    .collect(Collectors.toList());
-            branchesDiff = (List<String>) ((List) jsonMap.get("diff.Branches")).stream()
-                    .map(t -> ((Map) t).get("branch.terminalStatus-delta"))
-                    .flatMap(t -> ((List<String>) t).stream())
-                    .collect(Collectors.toList());
-            linesDiffData = (List<LineDiffData>) ((List) jsonMap.get("diff.Branches")).stream()
-                    .map(t -> {
-                        Map<String, Object> branchMap = (Map) t;
-                        return new LineDiffData(
-                                DiffStudyService.formatNum(branchMap.get("branch.branchId1").toString()),
-                                DiffStudyService.formatNum(branchMap.get("branch.terminal1.p-delta").toString()),
-                                DiffStudyService.formatNum(branchMap.get("branch.terminal1.q-delta").toString()),
-                                DiffStudyService.formatNum(branchMap.get("branch.terminal1.i-delta").toString()),
-                                DiffStudyService.formatNum(branchMap.get("branch.terminal2.p-delta").toString()),
-                                DiffStudyService.formatNum(branchMap.get("branch.terminal2.q-delta").toString()),
-                                DiffStudyService.formatNum(branchMap.get("branch.terminal2.i-delta").toString()),
-                                DiffStudyService.formatPerc(branchMap.get("branch.terminal1.p-delta-percent").toString()),
-                                DiffStudyService.formatPerc(branchMap.get("branch.terminal1.q-delta-percent").toString()),
-                                DiffStudyService.formatPerc(branchMap.get("branch.terminal1.i-delta-percent").toString()),
-                                DiffStudyService.formatPerc(branchMap.get("branch.terminal2.p-delta-percent").toString()),
-                                DiffStudyService.formatPerc(branchMap.get("branch.terminal2.q-delta-percent").toString()),
-                                DiffStudyService.formatPerc(branchMap.get("branch.terminal2.i-delta-percent").toString())
-                        );
-                    })
-                    .collect(Collectors.toList());
-
-            vlDiffData = (Map<String, VlDiffData>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
-                    .map(t -> {
-                        Map<String, Object> vlMap = (Map) t;
-                        return new VlDiffData(
-                                DiffStudyService.formatNum(vlMap.get("vl.vlId1").toString()),
-                                DiffStudyService.formatNum(vlMap.get("vl.minV-delta").toString()),
-                                DiffStudyService.formatNum(vlMap.get("vl.maxV-delta").toString()),
-                                DiffStudyService.formatPerc(vlMap.get("vl.minV-delta-percent").toString()),
-                                DiffStudyService.formatPerc(vlMap.get("vl.maxV-delta-percent").toString()));
-                    }).collect(Collectors.toMap(VlDiffData::getVlId, vlDiffData -> vlDiffData));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    private DiffData(List<String> switchesDiff, List<String> branchesDiff, List<LineDiffData> linesDiffData, Map<String, VlDiffData> vlDiffData) {
+        this.switchesDiff = switchesDiff;
+        this.branchesDiff = branchesDiff;
+        this.linesDiffData = linesDiffData;
+        this.vlDiffData = vlDiffData;
     }
 
     public List<String> getSwitchesIds() {
@@ -86,5 +44,51 @@ class DiffData {
 
     public Map<String, VlDiffData> getVlDiffData() {
         return vlDiffData;
+    }
+
+    public static DiffData parseData(String jsonDiff) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Object> jsonMap = objectMapper.readValue(jsonDiff, new TypeReference<Map<String, Object>>() {
+        });
+        List<String> switchesDiff = (List<String>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
+                .map(t -> ((Map) t).get("vl.switchesStatus-delta"))
+                .flatMap(t -> ((List<String>) t).stream())
+                .collect(Collectors.toList());
+        List<String> branchesDiff = (List<String>) ((List) jsonMap.get("diff.Branches")).stream()
+                .map(t -> ((Map) t).get("branch.terminalStatus-delta"))
+                .flatMap(t -> ((List<String>) t).stream())
+                .collect(Collectors.toList());
+        List<LineDiffData> linesDiffData = (List<LineDiffData>) ((List) jsonMap.get("diff.Branches")).stream()
+                .map(t -> {
+                    Map<String, Object> branchMap = (Map) t;
+                    return new LineDiffData(
+                            DiffStudyService.formatNum(branchMap.get("branch.branchId1").toString()),
+                            DiffStudyService.formatNum(branchMap.get("branch.terminal1.p-delta").toString()),
+                            DiffStudyService.formatNum(branchMap.get("branch.terminal1.q-delta").toString()),
+                            DiffStudyService.formatNum(branchMap.get("branch.terminal1.i-delta").toString()),
+                            DiffStudyService.formatNum(branchMap.get("branch.terminal2.p-delta").toString()),
+                            DiffStudyService.formatNum(branchMap.get("branch.terminal2.q-delta").toString()),
+                            DiffStudyService.formatNum(branchMap.get("branch.terminal2.i-delta").toString()),
+                            DiffStudyService.formatPerc(branchMap.get("branch.terminal1.p-delta-percent").toString()),
+                            DiffStudyService.formatPerc(branchMap.get("branch.terminal1.q-delta-percent").toString()),
+                            DiffStudyService.formatPerc(branchMap.get("branch.terminal1.i-delta-percent").toString()),
+                            DiffStudyService.formatPerc(branchMap.get("branch.terminal2.p-delta-percent").toString()),
+                            DiffStudyService.formatPerc(branchMap.get("branch.terminal2.q-delta-percent").toString()),
+                            DiffStudyService.formatPerc(branchMap.get("branch.terminal2.i-delta-percent").toString())
+                    );
+                })
+                .collect(Collectors.toList());
+
+        Map<String, VlDiffData> vlDiffData = (Map<String, VlDiffData>) ((List) jsonMap.get("diff.VoltageLevels")).stream()
+                .map(t -> {
+                    Map<String, Object> vlMap = (Map) t;
+                    return new VlDiffData(
+                            DiffStudyService.formatNum(vlMap.get("vl.vlId1").toString()),
+                            DiffStudyService.formatNum(vlMap.get("vl.minV-delta").toString()),
+                            DiffStudyService.formatNum(vlMap.get("vl.maxV-delta").toString()),
+                            DiffStudyService.formatPerc(vlMap.get("vl.minV-delta-percent").toString()),
+                            DiffStudyService.formatPerc(vlMap.get("vl.maxV-delta-percent").toString()));
+                }).collect(Collectors.toMap(VlDiffData::getVlId, vd -> vd));
+        return new DiffData(switchesDiff, branchesDiff, linesDiffData, vlDiffData);
     }
 }
