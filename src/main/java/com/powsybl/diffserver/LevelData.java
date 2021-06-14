@@ -19,7 +19,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class LevelData {
-    String id;
+    int id;
     double i;
     double v;
     String c;
@@ -27,7 +27,7 @@ public class LevelData {
     @Override
     public String toString() {
         return "LevelData{" +
-                "id='" + id + '\'' +
+                "id=" + id +
                 ", i=" + i +
                 ", v=" + v +
                 ", c='" + c + '\'' +
