@@ -841,7 +841,7 @@ public class DiffStudyService {
     }
 
     private String assignColorFromStringList(List<String> values, LevelsData levelsData, LevelDataType lDataType) {
-        List<Double> diffPercDoubleList = values.stream().filter(NumberUtils::isCreatable).map(Double::valueOf).collect(Collectors.toList());
+        List<Double> diffPercDoubleList = values.stream().filter(NumberUtils::isCreatable).map(Double::valueOf).map(Math::abs).collect(Collectors.toList());
         return assignColorFromDoubleList(diffPercDoubleList, levelsData, lDataType);
     }
 
