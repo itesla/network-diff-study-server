@@ -77,6 +77,7 @@ public class DiffStudyService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiffStudyService.class);
     public static final String SAME_LEVEL_COLOR = "black";
+    private static final int VARIANTNUM = 0;
 
     public enum LevelDataType {
         POWER_CURRENT,
@@ -278,8 +279,8 @@ public class DiffStudyService {
 
     // This functions call directly the network store server without using the dedicated client because it's a blocking client.
     Mono<List<VoltageLevelAttributes>> getNetworkVoltageLevels(UUID networkUuid) {
-        String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/voltage-levels")
-                .buildAndExpand(networkUuid)
+        String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/{variantNum}/voltage-levels")
+                .buildAndExpand(networkUuid, VARIANTNUM)
                 .toUriString();
 
         Mono<TopLevelDocument<com.powsybl.network.store.model.VoltageLevelAttributes>> mono = webClient.get()
@@ -292,8 +293,8 @@ public class DiffStudyService {
     }
 
     Mono<List<String>> getNetworkSubstationsIds(UUID networkUuid) {
-        String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/substations")
-                .buildAndExpand(networkUuid)
+        String path = UriComponentsBuilder.fromPath("v1/networks/{networkId}/{variantNum}/substations")
+                .buildAndExpand(networkUuid, VARIANTNUM)
                 .toUriString();
 
         Mono<TopLevelDocument<com.powsybl.network.store.model.SubstationAttributes>> mono = webClient.get()
